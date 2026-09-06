@@ -380,15 +380,17 @@ shows incoming/outgoing counts at a glance.
 ### 3.6 BCM + measurable-target attributes
 
 Switch the tree view to **Advanced** (top of the Process Catalog).
-Four extra fields appear on each Activity, right below Automation
+Several extra fields appear on each Activity, right below Automation
 and Estimated Duration:
 
 | Field | What it's for | Try on *Outage triage* |
 |---|---|---|
 | **Criticality** | Business-continuity tier | *Tier 1 — Mission critical* |
-| **RTO (hours)** | Recovery Time Objective | `4` |
-| **Success Measure** | Measurable target next to the narrative outcome | *Field crew on site within 30 minutes for Tier 1 outages* |
-| **SLA Target** | Free-text SLA — accept whatever fits | *P95 30 min from detection* |
+| **RTO (hours)** | Recovery Time Objective — how fast must it recover? | `4` |
+| **RPO (hours)** | Recovery Point Objective — how much data loss (in time) is tolerable? The BCM pair to RTO | `1` |
+| **Trigger** | What initiates the activity (Scheduled / Event-driven / Upstream completion / Manual / External request) | *Event-driven* |
+| **Volume** | Processing scale / throughput — Frequency is cadence, this is *how much* | *~200 outages/yr* |
+| **Target / SLA** | Measurable target / SLA (this one field absorbed the former separate *Success Measure* and *SLA Target*) | *Field crew on site within 30 min; P95 30 min from detection* |
 
 Then scroll one more field down to **Controls** — a multi-select
 tied to the controls you defined on **Governance → Documents**. If
@@ -401,9 +403,11 @@ from your Governance seed). Delete that control later on Governance
 Documents and watch this picker — the chip disappears
 automatically. No dangling references.
 
-Why this matters: a regulator asking *"what's the RTO for outage
-triage?"* now gets a real answer from the platform. Dashboards can
-group activities by criticalityTier. And the Controls link closes
+Why this matters: a regulator asking *"what's the RTO and RPO for
+outage triage?"* now gets a real answer from the platform — recovery
+speed and tolerable data loss as a pair, the way a BCM/DR plan states
+them. Dashboards can group activities by criticalityTier. And the
+Controls link closes
 the loop between a policy definition and the concrete work that
 implements it — the reverse view (which activities implement this
 control?) is available from Governance Documents.
