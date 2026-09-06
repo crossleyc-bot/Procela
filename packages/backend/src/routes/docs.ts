@@ -830,6 +830,16 @@ router.get('/help.html', (_req: Request, res: Response) => {
     });
     res.type('text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
+    // Allow the in-app /help page to embed this guide in a same-origin
+    // iframe. The global helmet config sets frame-ancestors 'none' +
+    // X-Frame-Options: DENY; this is a static, read-only, credential-free
+    // reference doc, so relaxing it to same-origin here is safe. (The app
+    // and this API are one origin behind the dev proxy and CloudFront.)
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' https: data:; frame-ancestors 'self'",
+    );
     res.send(html);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'HTML render failed.' });

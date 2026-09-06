@@ -140,7 +140,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 ![Data Assets list showing several rows with governance-tier badges (Bronze / Silver / Gold), health scores, and at least one row carrying a green "Synced N min ago" chip next to its name so the connector-sourced freshness signal is visible.](images/data-assets-list.png)
 
 - Register data assets in business terms. Each asset has a Trust Level (Untrusted / Managed / Trusted — DAMA mode calls these Uncertified / Managed / Certified).
-- Sidebar filter by data type: Operational, Governance, Reference, Analytical, Master.
+- Sidebar filter by **Data Classification** — the business *kind* of data: Master, Reference, Transactional, Analytical, Metadata (distinct from the SQL data type, and from the Sensitivity axis below).
 - **Filter by rules (DQ coverage).** The toolbar has a rules filter — *Has rules* / *No rules* / *Rules but unmeasured*, each with a live count. *No rules* is your coverage gap (assets nothing measures yet); *Rules but unmeasured* is the false-confidence bucket (assets that carry rules but where none have a real, non-simulated result, so their health is an **estimate** badged *Est*, not a measured reading — the ones to point a connector at next).
 - Inline editing for Trust Level directly in the table.
 - **Health is earned from measured data quality, not hand-set.** The Health column shows an asset's rolled-up score only when at least one *measured* (non-simulated) quality rule backs it; with no measured rule it reads **0%**. It's read-only in the list — a connector-freshness or manual number is never surfaced as "health". (Per-column health on the 360 view still reads "—" for a column whose rule hasn't been measured.)
@@ -150,8 +150,9 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Bulk set Trust Level / owner / steward.
 - Owner and stewards inherit from the domain by default. Under both the Owner picker and the Stewards picker on the edit form, the field shows a hint reading "Inherits from domain — <person(s)>" when the pick is empty and the domain has an owner / stewards; the asset row still renders with the effective person(s) as if you'd picked them. Pick a specific person (or list) when the asset has its own accountable owner different from the domain's (regulatory scope, cross-functional asset, delegation, transition period); the hint switches to "Overrides domain (<person>) — Reset to domain owner" with a one-click reset. Changing a domain owner or steward propagates to every inheriting asset automatically. DAMA-aligned: Data Asset Owner and Data Steward are separate accountabilities from their Domain counterparts by design, but should default to the domain values.
 - Where Used in the detail modal shows every process, mapping, and policy referencing the asset.
+- **Impact analysis — "if this asset changes, what breaks?"** The *Impact* panel on the 360 view counts how many activities consume the asset, how many processes those roll up to, and how many value streams that touches, then expands to a per-person **Notify** list — each entry showing *why* they'd be told (Owner on an activity, Responsible person, Domain steward, etc.). Use it as your change-comms distribution list before deprecating a system or retiring a field.
 - **Bound columns** panel on the detail (360) view lists the columns the asset is bound to — each with its rule count and per-column health — plus which physical table/columns it maps to. A column with a rule that hasn't been measured reads "—", never a fabricated score.
-- **Sensitivity tags.** An asset can carry one or more sensitivity tags describing the regulated content it holds: PII (personally identifiable information), PHI (protected health), PCI (payment-card), FINANCIAL, CREDENTIAL, CONFIDENTIAL, PUBLIC. Distinct axis from Data Classification (PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED) — the same asset can be PII inside an INTERNAL surface, or PCI + PII simultaneously. The API surface is two routes: `POST /data-assets/:id/suggest-sensitivity` asks Claude to classify the asset from its name, description, system type, and column names/types, returning `{tag, confidence, reason}[]` for review; `PUT /data-assets/:id/sensitivity` writes the accepted set. Classifier is deliberately conservative — false positives (labelling everything PII) create noise across every gap/coverage report, so it errs on "don't tag if unsure". Frontend review UX (a Sensitivity section on the 360 view with per-tag Accept/Reject chips) follows in a subsequent release.
+- **Sensitivity tags.** An asset can carry one or more sensitivity tags describing the regulated content it holds: PII (personally identifiable information), PHI (protected health), PCI (payment-card), FINANCIAL, CREDENTIAL, CONFIDENTIAL, PUBLIC. Distinct axis from Data Classification (PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED) — the same asset can be PII inside an INTERNAL surface, or PCI + PII simultaneously. The API surface is two routes: `POST /data-assets/:id/suggest-sensitivity` asks Claude to classify the asset from its name, description, system type, and column names/types, returning `{tag, confidence, reason}[]` for review; `PUT /data-assets/:id/sensitivity` writes the accepted set. Classifier is deliberately conservative — false positives (labelling everything PII) create noise across every gap/coverage report, so it errs on "don't tag if unsure". The 360 view has a **Suggest & Review** UX: click *Suggest sensitivity tags* and each proposal gets its own **Accept / Reject** chip, so you take the ones that fit and drop the rest; a rejected tag stays rejected across re-runs, so a later *Suggest* won't re-propose it.
 - **Synced N min ago** chip. When an on-prem connector last refreshed an asset's freshness signal, the row shows a small pill next to the name: green (**Live**, synced in the last 30 min), amber (synced 30 min – 4 h ago), red (synced > 4 h ago). The tooltip carries the exact ISO timestamp. Manually-added assets never show a chip. The chip is a "trust the number" cue — if it's green, the row count and last-write timestamp reflect the source database, not a human's last manual edit.
 - **Connector-discovered assets arrive as Bronze**. When an on-prem connector reports a new table, Procela creates the asset at Bronze tier with no owner, no steward, no linked processes. That's intentional — new arrivals should surface as work items for stewards on the Orphan Assets and Ungoverned dashboards, not silently melt into an approved catalog.
 - Data Assets is operational-only. Governance documents (charters, policies, standards, frameworks) live under Governance → Documents, not here. The earlier All · Operational · Governance lens was removed from this page when the governance template stopped seeding placeholder data assets and started seeding real Policies instead.
@@ -162,6 +163,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Reverse view of the catalog: data assets that exist but no process step references them. The forward Discover loop asks "what data supports this step?"; this page asks the inverse — "what data do we have that nobody's using?". Reachable from the sidebar (Data → Orphan Assets).
 - Useful as a cleanup signal (delete / archive / reassign) and as a fresh-mapping hint (an orphan that looks process-shaped probably belongs on a step nobody's mapped yet). Each row shows the asset, owning system, owner, governance tier, and last-updated date; the name links straight to the asset detail so you can fix the gap in one click.
 - The Dashboard's Governance Gaps card surfaces the orphan count alongside the other gap signals — clicking through lands you here.
+- The same orphans also carry an **Unmapped** badge on the main Data Assets catalog, and the **Mapping → Unmapped** toolbar filter isolates them there (`/data-assets?mapping=unmapped`) — so you can work the gap from the full registry, not only this dedicated page.
 
 ### Business Glossary
 
@@ -233,7 +235,7 @@ Where value streams can be created. Streams attach to the active org in the Work
   - **Online** — heartbeat received in the last 30 minutes
   - **Stale** — no heartbeat in 30 min – 4 hours
   - **Offline** — no heartbeat in over 4 hours (fires an in-app notification once per ONLINE→OFFLINE transition)
-- **Adapters bundled with the container today**: Postgres, SQL Server, MySQL/MariaDB. Cloud warehouses are intentionally out of scope — they go through Connections.
+- **Adapters bundled with the container today**: Postgres, MySQL/MariaDB, SQL Server, and Oracle. Cloud warehouses are intentionally out of scope — they go through Connections.
 - **Click a connector row** to open the detail drawer: rename, reassign which systems it reports for, and review the recent-activity timeline (paired, heartbeats, scans, ASSETS_REPORTED with created / updated counts).
 
 ![The pairing-code modal after clicking "Add connector" and hitting Generate — an eight-digit code in monospaced type dominates the modal, with the docker run hint underneath. This is what the admin hands (securely) to the operator running the container.](images/connector-pairing.png)
@@ -337,7 +339,7 @@ Skills drive four cross-page workflows:
 - Each row carries a documentType badge plus the existing status, review cadence, owner, and category. Codes are auto-generated and per-type — CHA-001, FRW-001, STD-001, POL-001 — so the code itself tells you what kind of document you're looking at.
 - Controls hang off Policies only. The expanded controls panel only opens for rows with documentType: Policy — charters and frameworks don't have rule-shaped controls and the panel stays hidden for them.
 - Controls have a type (Preventive / Detective / Corrective) and an automation mode (Human / Agent / Hybrid).
-- This used to be called Policies and was scoped to rules only. The old /governance-policies URL still works as a back-compat alias; the canonical path is /governance-documents. Sidebar label is now Documents under the Governance section.
+- This used to be called Policies and was scoped to rules only. The canonical path is /governance-policies (what the sidebar links to); /governance-documents also resolves as an alias. Sidebar label is now Documents under the Governance section.
 - If you previously ran the Generate governance processes wand, it used to seed 15 "governance Data Assets" — Charter, Policies, Standards, Glossary, Domain Catalog, etc. A one-time startup migration moves the four real documents (Charter, Data Policies, Data Standards, Access Control Policies) into Governance Documents with the right type, and deletes the rest because they were either duplicates of existing entities (Glossary, Domains, Lineage, DQ Rules, Issues, Tasks) or generated outputs (reports, communications) that were never really stored data.
 
 ### Documentation (Manual + Procedures)
@@ -357,6 +359,7 @@ Skills drive four cross-page workflows:
 - Tasks — workflow states (Draft → Open → In Progress → Pending Review → Completed), priority, assignee, due dates.
 - Issues — 9 types (Metadata, Data Quality, Classification, Ownership, Policy, Access, Lineage, Compliance, Workflow), severity levels.
 - Steward onboarding: auto-creates 4 tasks when a steward role is assigned (7 / 14 / 21 / 90-day milestones).
+- **Automatic overdue detection.** An hourly background sweep writes a *"Task overdue: …"* warning to the notifications bell for any task with a due date in the past that's still OPEN / IN_PROGRESS / PENDING_APPROVAL — to the assignee, or org-wide if the task is unassigned. It's idempotent (it stamps a task after firing and re-arms only when the due date moves forward or the task reopens), and `POST /api/v1/governance-tasks/sweep-overdue` runs the same check synchronously on demand.
 
 ### Governance Exceptions
 
@@ -394,7 +397,7 @@ Skills drive four cross-page workflows:
 ### Reports
 
 - The Reports page is the report catalog + Report Builder — build, save, and open reports against Procela's data model. It used to carry Executive Report and Scorecard tabs; both were removed, so there's no tab bar any more. (Cube pivots live on their own page at Explore → Analysis.)
-- Audit log full export. The Audit Log page has two CSV exports: Export view dumps what's currently loaded (post-filter, capped at the page limit) for ad-hoc review; Full log (CSV) hits the server endpoint that bypasses the cap and includes the `entryHash` column for chain-integrity verification offline. Use the second one for compliance reviewers asking for "everything in this org for the last N months".
+- Audit log full export. The Audit Log page (Insights → Review → Audit Log, `/audit-log`) filters by org, entity type + id, and user, and caps the on-screen result size for responsiveness. It offers two CSV exports: Export view dumps what's currently loaded (post-filter, capped at the page limit) for ad-hoc review; Full log (CSV) hits the server endpoint that bypasses the cap and includes the `entryHash` column for chain-integrity verification offline. Use the second one for compliance reviewers asking for "everything in this org for the last N months".
 - My Reports + Report Builder. Build a report against Procela's logical data model — pick a starting entity (Processes, Data Assets, Systems, People, Mappings, Domains, Roles, Skills, Organizations), choose columns directly on that entity or joined columns from a related entity (e.g. Responsible Person → Name, Required Skills → Name), add filters with op-aware value inputs (enum dropdowns, number coercion), set sort, and preview live as you type. Save with a name and visibility (Shared with org / Private to me); saved reports show up on the My Reports tab with metadata (primary entity, column count). Edit at /reports/builder/:id; new at /reports/builder.
 - Gap Detection. Cross-cutting view of unmapped activities, ungoverned assets, ungoverned columns (a column an asset is bound to but has no quality rule — coverage you claimed but never measure), ownership gaps, low-health assets, unowned domains, orphaned assets, unlinked assets, unassigned people, and duplicate asset names. Drill-down everywhere: the four summary cards at the top (Total Gaps / Critical / Warning / Informational) scroll to the first matching section when clicked; each row inside a section is a hyperlink that opens the affected item on its source page so you can fix the gap in one click — Unmapped Activity rows jump to the Process Catalog with the node highlighted, asset rows jump to Data Assets, person rows open the person's profile, and so on.
 
@@ -519,7 +522,7 @@ A handful of components show up on every detail page so the patterns stay the sa
 - Click the bell to open the dropdown. Each row links straight to the source entity — the click marks it read on the way through.
 - Mark all read clears the unread state without deleting; Clear all deletes every notification with no undo and is a two-click action (the first click arms it with a 3-second countdown, the second confirms). Per-row x dismisses a single notification.
 - Escape or clicking outside closes the dropdown. The unread count refreshes whenever you navigate, so a notification arriving while you're on another page surfaces when you come back.
-- Weekly digest. Procela snapshots the gap signals shown on the Dashboard (mapping coverage, orphan assets, ungoverned-in-use assets, ownerless processes) and diffs them week-over-week. When something meaningful changes, the bell gains a notification with a one-click link to the affected page — "3 new orphan data assets this week" links to Orphan Assets, "Mapping coverage dropped to 72%" links to the Process ↔ Data Map, "2 new ownerless processes" links to the Process Catalog. The thresholds are conservative — small noise (one orphan promoted, one mapping added) doesn't ping anyone. The first run for an org is a baseline and writes nothing; subsequent runs compare against the previous snapshot. Triggered manually for now via the digest endpoint; a scheduled Sunday-evening job is the obvious next step.
+- Weekly digest. Procela snapshots the gap signals shown on the Dashboard (mapping coverage, orphan assets, ungoverned-in-use assets, ownerless processes) and diffs them week-over-week. When something meaningful changes, the bell gains a notification with a one-click link to the affected page — "3 new orphan data assets this week" links to Orphan Assets, "Mapping coverage dropped to 72%" links to the Process ↔ Data Map, "2 new ownerless processes" links to the Process Catalog. The thresholds are conservative — small noise (one orphan promoted, one mapping added) doesn't ping anyone. The first run for an org is a baseline and writes nothing; subsequent runs compare against the previous snapshot. A built-in scheduler fires it automatically — on the first hourly tick after Sunday 23:00 UTC each week, walking every org — with the last-fired timestamp persisted so a restart in the window doesn't double-notify; `POST /api/v1/digest/run` still triggers a one-off run on demand. Set `PROCELA_DISABLE_SCHEDULERS=1` on every replica except the one designated to run scheduled work so jobs fire once cluster-wide rather than once per replica.
 
 ### List rows — clipped text with hover tooltip
 
@@ -788,8 +791,23 @@ Click Revoke on that row — the device gets booted to the login screen on its n
 
 ## 13. Keyboard shortcuts
 
-Procela has a small set of keyboard chords for the things you'll do most often.
- Press Shift + ? anywhere
- to open the full reference, or use the button below.
+Procela has a small set of keyboard chords for the things you'll do most often. Press `Shift + ?` anywhere to open the full reference in-app.
 
-{[ ['/', 'Open command palette'], ['Ctrl / Cmd + K', 'Open command palette'], ['Shift + ?', 'Show all keyboard shortcuts'], ['g then d', 'Go to Dashboard'], ['g then o', 'Go to Organizations'], ['g then p', 'Go to People'], ['g then c', 'Go to Processes'], ['g then a', 'Go to Data Assets'], ['g then s', 'Go to Systems'], ['g then m', 'Go to Data Mapping (mappings)'], ['g then l', 'Go to Lineage'], ['g then q', 'Go to Data Quality'], ['g then g', 'Go to Governance Program'], ['g then r', 'Go to Reports'], ['g then e', 'Go to Enterprise View'], ['g then h', 'Go to Help'], ['Escape', 'Close the palette, drawers, modals, and dropdowns'], ].map(([keys, what]) => ( {keys} {what} ))}
+| Keys | Action |
+|---|---|
+| `/` or `Ctrl / Cmd + K` | Open the command palette |
+| `Shift + ?` | Show all keyboard shortcuts |
+| `g` then `d` | Go to Dashboard |
+| `g` then `o` | Go to Organizations |
+| `g` then `p` | Go to People |
+| `g` then `c` | Go to Processes |
+| `g` then `a` | Go to Data Assets |
+| `g` then `s` | Go to Systems |
+| `g` then `m` | Go to Data Mapping |
+| `g` then `l` | Go to Data Lineage |
+| `g` then `q` | Go to Data Quality |
+| `g` then `g` | Go to Governance Foundation |
+| `g` then `r` | Go to Reports |
+| `g` then `e` | Go to Enterprise View |
+| `g` then `h` | Go to Help |
+| `Escape` | Close the palette, drawers, modals, and dropdowns |
