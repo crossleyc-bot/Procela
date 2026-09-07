@@ -15,6 +15,7 @@ import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
 import { useAiEnabled } from '../stores/aiConfigStore';
 import { useRegimeStore } from '../stores/regimeStore';
+import { useComplianceStore, BUILTIN_COMPLIANCE_FRAMEWORKS } from '../stores/complianceStore';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
 import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
@@ -231,6 +232,45 @@ export default function SettingsPage() {
       setRegimes(prev);
     } finally { setRegimesBusy(false); }
   };
+
+  // ── Compliance frameworks (per-tenant) ──
+  // Which compliance frameworks (SOX / HIPAA / GDPR / …) are selectable as
+  // activity compliance tags. Free-form: the admin toggles the built-in set and
+  // can add their own. Unset on the org = the built-in defaults.
+  const [frameworks, setFrameworks] = useState<string[]>([...BUILTIN_COMPLIANCE_FRAMEWORKS]);
+  const [frameworksBusy, setFrameworksBusy] = useState(false);
+  const [frameworkDraft, setFrameworkDraft] = useState('');
+  useEffect(() => {
+    if (!activeOrgId) return;
+    apiClient
+      .get<{ success: boolean; data: { activeComplianceFrameworks?: string[] } }>(`/organizations/${activeOrgId}`)
+      .then((res) => {
+        const r = res.data?.activeComplianceFrameworks;
+        setFrameworks(Array.isArray(r) ? r : [...BUILTIN_COMPLIANCE_FRAMEWORKS]);
+      })
+      .catch(() => { /* leave defaults */ });
+  }, [activeOrgId]);
+  const saveFrameworks = async (next: string[]) => {
+    if (!activeOrgId || frameworksBusy) return;
+    const prev = frameworks;
+    setFrameworks(next);
+    setFrameworksBusy(true);
+    try {
+      await apiClient.put(`/organizations/${activeOrgId}`, { activeComplianceFrameworks: next });
+      void useComplianceStore.getState().fetch(activeOrgId);
+    } catch {
+      setFrameworks(prev);
+    } finally { setFrameworksBusy(false); }
+  };
+  const addFramework = () => {
+    const v = frameworkDraft.trim();
+    if (v && !frameworks.some((f) => f.toLowerCase() === v.toLowerCase())) {
+      void saveFrameworks([...frameworks, v]);
+    }
+    setFrameworkDraft('');
+  };
+  // Built-in frameworks the tenant has turned off — offered as one-click re-add.
+  const inactiveBuiltinFrameworks = BUILTIN_COMPLIANCE_FRAMEWORKS.filter((f) => !frameworks.includes(f));
 
   // ── Council Scorecard targets (per-tenant) ──
   // The thresholds the scorecard grades each division against. Unset on the
@@ -1004,6 +1044,88 @@ export default function SettingsPage() {
             No regulatory regimes are active — assets in this tenant can carry only the universal data-sensitivity tags.
           </p>
         )}
+      </Card>
+
+      {/* Compliance frameworks — an org admin curates which frameworks are
+          selectable as activity compliance tags. Unlike the fixed sensitivity
+          regimes above, this list is free-form: toggle the built-in set and add
+          your own (e.g. an internal control catalog). Unset on the org = the
+          built-in defaults. Drives the activity Compliance picker. */}
+      <Card padding="1.5rem" marginBottom="1.5rem">
+        <h2 style={sectionTitleStyle}>Compliance frameworks</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+          Choose which compliance frameworks are selectable as compliance tags on activities in <strong>{activeOrgName || 'this tenant'}</strong>. Add your own frameworks alongside the built-in set. Tags already applied to an activity keep showing even if the framework is later removed here.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+          {frameworks.length === 0 && (
+            <span style={{ fontSize: 12, color: 'var(--color-warning)', fontStyle: 'italic' }}>
+              No frameworks active — the activity Compliance picker will be empty.
+            </span>
+          )}
+          {frameworks.map((f) => (
+            <span key={f} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 14, fontSize: 12, fontWeight: 500,
+              background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+              border: '1px solid var(--color-primary)',
+            }}>
+              {f}
+              <button
+                type="button"
+                onClick={() => saveFrameworks(frameworks.filter((x) => x !== f))}
+                disabled={frameworksBusy}
+                aria-label={`Remove ${f}`}
+                title={`Remove ${f}`}
+                style={{ background: 'none', border: 'none', cursor: frameworksBusy ? 'wait' : 'pointer', color: 'var(--color-primary)', padding: 0, lineHeight: 1, fontSize: 14 }}
+              >&times;</button>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={frameworkDraft}
+            onChange={(e) => setFrameworkDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addFramework(); } }}
+            disabled={frameworksBusy}
+            placeholder="Add a framework (e.g. FedRAMP)"
+            style={{ fontSize: 13, padding: '6px 10px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', minWidth: 220 }}
+          />
+          <button
+            type="button"
+            onClick={addFramework}
+            disabled={frameworksBusy || !frameworkDraft.trim()}
+            style={{ fontSize: 13, fontWeight: 600, padding: '6px 14px', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)', background: 'var(--color-primary)', color: '#fff', cursor: frameworksBusy || !frameworkDraft.trim() ? 'not-allowed' : 'pointer', opacity: frameworksBusy || !frameworkDraft.trim() ? 0.5 : 1 }}
+          >
+            Add
+          </button>
+        </div>
+        {inactiveBuiltinFrameworks.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginBottom: 6 }}>Add back a built-in framework:</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {inactiveBuiltinFrameworks.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => saveFrameworks([...frameworks, f])}
+                  disabled={frameworksBusy}
+                  style={{ fontSize: 12, padding: '3px 10px', borderRadius: 14, border: '1px dashed var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-muted)', cursor: frameworksBusy ? 'wait' : 'pointer' }}
+                >
+                  + {f}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => saveFrameworks([...BUILTIN_COMPLIANCE_FRAMEWORKS])}
+          disabled={frameworksBusy}
+          style={{ marginTop: 14, fontSize: 12, background: 'none', border: 'none', color: 'var(--color-primary)', cursor: frameworksBusy ? 'wait' : 'pointer', padding: 0, textDecoration: 'underline' }}
+        >
+          Reset to built-in defaults
+        </button>
       </Card>
 
       {/* Council Scorecard targets — an org admin sets the thresholds the

@@ -20,13 +20,14 @@ import {
   LEVEL_CONFIG, statusColors,
   SIMPLE_TRANSITIONS, REVIEW_TRANSITIONS, ADVANCED_TRANSITIONS,
   SIMPLE_LOCKED, REVIEW_LOCKED, ADVANCED_LOCKED,
-  COMPLIANCE_OPTIONS, FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS,
+  FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS,
   countByLevel, hasRequiredPath, getRequiredNextLevel,
   type ProcessNode, type NodeLevel,
   type FlowRelationship, type TagEntry,
   type PersonRef, type SystemRef,
   type DataAssetRef, type PolicyRef, type MappingInfo,
 } from '../ProcessCatalogPage';
+import { useComplianceFrameworks } from '../../stores/complianceStore';
 
 // ── Tree Node ──
 
@@ -117,6 +118,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
    *  Est. Duration from the per-node panel. Advanced shows everything. */
   viewMode: 'simple' | 'advanced';
 }) {
+  // The tenant's active compliance-framework list (org-configurable in
+  // Settings → Data). Drives the Compliance picker options; already-selected
+  // tags outside this set still render as chips.
+  const complianceFrameworks = useComplianceFrameworks();
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
@@ -400,7 +405,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         drifted from it. Existing values are retained on the
                         record, just no longer edited from this panel. */}
                     {viewMode === 'advanced' && (
-                      <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                      <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                     )}
                   </>
                 );
@@ -428,7 +433,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         values stay on the record. */}
                     {viewMode === 'advanced' && (
                       <>
-                        <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                        <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                         <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
                         <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
                       </>
