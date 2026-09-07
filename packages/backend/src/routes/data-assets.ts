@@ -104,6 +104,10 @@ export interface StoredDataAsset {
    *  timestamped by `lastSyncedAt`. Undefined until a connector reports
    *  one — manually-created assets have no row count. */
   rowCount?: number | null;
+  /** Fingerprint of the column set from the last connector scan, used to
+   *  detect schema drift on the next scan. Undefined until a scan reports
+   *  columns. */
+  schemaFingerprint?: string | null;
   createdAt: string;
   updatedAt: string;
 }

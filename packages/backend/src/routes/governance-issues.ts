@@ -24,6 +24,9 @@ const ISSUE_TYPES = [
   'LINEAGE',
   'COMPLIANCE',
   'WORKFLOW',
+  // Auto-raised by the connector scan ingest when a discovered asset's column
+  // set changes between scans (a column added / removed / retyped).
+  'SCHEMA_DRIFT',
 ] as const;
 
 const ISSUE_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
@@ -167,6 +170,116 @@ export async function syncDataQualityIssueForRule(rule: {
       message: `${rule.name || 'A DQ rule'} needs attention on ${asset.name}. Score ${rule.currentScore ?? '?'} against threshold ${rule.threshold ?? '?'}.`,
       link: `/governance-issues?id=${newIssue.id}`,
     });
+  }
+}
+
+/** One scanned asset's drift verdict, from the connector report ingest. */
+export interface SchemaDriftEvent {
+  asset: { id: string; name: string; systemId?: string | null; ownerPersonId?: string | null };
+  /** True when this scan's column set differs from the previously fingerprinted one. */
+  drifted: boolean;
+  /** Column count reported by this scan, for the issue description. */
+  columnCount?: number;
+}
+
+/**
+ * Reconcile schema-drift governance issues for a batch of scanned assets.
+ * Called by the connector report ingest after it computes drift per asset:
+ *   - drifted → ensure one OPEN SCHEMA_DRIFT issue exists (create + notify on
+ *     first sighting; refresh the description otherwise).
+ *   - not drifted → auto-resolve any OPEN SCHEMA_DRIFT issue for the asset
+ *     ("schema stabilized").
+ *
+ * Batched: one issues snapshot (+ at most one domains snapshot) for the whole
+ * report, so it adds no per-asset round-trips to the hot ingest path. Dedup is
+ * on (dataAssetId, issueType=SCHEMA_DRIFT) rather than linkedRuleId, since the
+ * finding is asset-level, not rule-level.
+ */
+export async function reconcileSchemaDriftIssues(orgId: string, events: SchemaDriftEvent[]): Promise<void> {
+  if (!events.length) return;
+  const allIssues = await governanceIssuesRepo.list();
+  const openByAsset = new Map<string, StoredGovernanceIssue>();
+  for (const i of allIssues) {
+    if (i.issueType === 'SCHEMA_DRIFT' && i.dataAssetId && !TERMINAL_STATUSES.has(i.status)) {
+      openByAsset.set(i.dataAssetId, i);
+    }
+  }
+  // Only resolve the domain steward/owner when we actually need to create an
+  // issue (drift on an asset with no open one).
+  const needsAssignee = events.some((e) => e.drifted && !openByAsset.has(e.asset.id));
+  const allDomains = needsAssignee ? await dataDomainsRepo().list() : [];
+  const now = new Date().toISOString();
+
+  for (const ev of events) {
+    const open = openByAsset.get(ev.asset.id);
+    const colNote = typeof ev.columnCount === 'number' ? ` (now ${ev.columnCount} columns)` : '';
+    if (ev.drifted) {
+      if (open) {
+        await governanceIssuesRepo.update(open.id, {
+          description: `The scanned column set for ${ev.asset.name} changed since the last scan${colNote}.`,
+          updatedAt: now,
+        });
+        continue;
+      }
+      // Assignee: domain steward > domain owner > asset owner (matches the DQ
+      // auto-issue precedence).
+      const domain = allDomains.find((d) => d.dataAssetIds?.includes(ev.asset.id));
+      let assignedTo: string | null = null;
+      if (domain?.stewardIds && domain.stewardIds.length > 0) assignedTo = domain.stewardIds[0];
+      else if (domain?.ownerId) assignedTo = domain.ownerId;
+      else if (ev.asset.ownerPersonId) assignedTo = ev.asset.ownerPersonId;
+
+      const newIssue: StoredGovernanceIssue = {
+        id: uuid(),
+        orgId,
+        title: `Schema drift: ${ev.asset.name}`,
+        description: `The scanned column set for ${ev.asset.name} changed since the last scan${colNote} — a column was added, removed, or retyped. Verify downstream consumers still work.`,
+        issueType: 'SCHEMA_DRIFT',
+        severity: 'MEDIUM',
+        status: 'OPEN',
+        domainId: domain?.id || null,
+        dataAssetId: ev.asset.id,
+        systemId: ev.asset.systemId || null,
+        reportedBy: null,
+        assignedTo,
+        resolutionSummary: null,
+        createdAt: now,
+        updatedAt: now,
+        closedAt: null,
+        linkedRuleId: null,
+      };
+      await governanceIssuesRepo.create(newIssue);
+      auditService.log(orgId, null, 'GovernanceIssue', newIssue.id, 'AUTO_CREATED', null, { dataAssetId: ev.asset.id, issueType: 'SCHEMA_DRIFT' });
+      logger.info({ assetId: ev.asset.id, issueId: newIssue.id }, 'Schema-drift auto-issue created');
+      if (assignedTo) {
+        createNotification({
+          orgId,
+          userId: assignedTo,
+          type: 'ACTION',
+          title: `Schema drift: ${ev.asset.name}`,
+          message: `${ev.asset.name}'s column set changed since the last scan. Verify downstream consumers still work.`,
+          link: `/governance-issues?id=${newIssue.id}`,
+        });
+      }
+    } else if (open) {
+      await governanceIssuesRepo.update(open.id, {
+        status: 'RESOLVED',
+        resolutionSummary: 'Schema stabilized — the column set matched the previous scan.',
+        closedAt: now,
+        updatedAt: now,
+      });
+      auditService.log(orgId, null, 'GovernanceIssue', open.id, 'AUTO_RESOLVED', null, { dataAssetId: ev.asset.id, issueType: 'SCHEMA_DRIFT' });
+      if (open.assignedTo) {
+        createNotification({
+          orgId,
+          userId: open.assignedTo,
+          type: 'INFO',
+          title: 'Schema drift resolved',
+          message: `${ev.asset.name}'s schema matched the previous scan again.`,
+          link: `/governance-issues?id=${open.id}`,
+        });
+      }
+    }
   }
 }
 

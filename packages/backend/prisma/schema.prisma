@@ -515,6 +515,10 @@ model DataAsset {
   // engine statistics, not a live COUNT(*)). BigInt so billion-row fact
   // tables don't overflow. Null until a connector reports one.
   rowCount                BigInt?
+  // Fingerprint (sha256) of the column set reported by the last connector
+  // scan. Compared against the next scan's fingerprint to detect schema drift
+  // — a column added, removed, or retyped. Null until a scan reports columns.
+  schemaFingerprint       String?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 

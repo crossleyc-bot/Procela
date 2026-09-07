@@ -21,6 +21,8 @@ const { connectors, connectorEvents, scanForOfflineConnectors } = require('../ro
 const { dataAssets, dataAssetColumns } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { notifications } = require('../routes/notifications');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceIssues } = require('../routes/governance-issues');
 
 function request(
   port: number, method: string, path: string,
@@ -79,7 +81,7 @@ describe('connector routes', () => {
         }
       }
     };
-    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(dataAssetColumns); sweep(notifications);
+    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(dataAssetColumns); sweep(notifications); sweep(governanceIssues);
   });
 
   after(async () => {
@@ -90,7 +92,7 @@ describe('connector routes', () => {
         }
       }
     };
-    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(dataAssetColumns); sweep(notifications);
+    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(dataAssetColumns); sweep(notifications); sweep(governanceIssues);
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -309,6 +311,53 @@ describe('connector routes', () => {
       assert.strictEqual(third.body.data.columnsCreated, 0);
       assert.strictEqual(third.body.data.columnsUpdated, 0);
       assert.strictEqual(dataAssetColumns.filter((c: any) => c.dataAssetId === asset.id).length, 3);
+    });
+
+    it('POST /report detects schema drift: lowers health and raises/resolves an issue', async () => {
+      const assetName = PREFIX + 'drift';
+      const fresh = () => new Date().toISOString();
+      // Baseline scan — asset + fingerprint established, no drift.
+      await request(port, 'POST', '/connectors/report', {
+        body: { assets: [{ name: assetName, rowCount: 100, lastWriteAt: fresh(), columns: [
+          { name: 'id', dataType: 'integer' },
+          { name: 'email', dataType: 'text' },
+        ] } ] },
+        bearer: token,
+      });
+      const asset = dataAssets.find((d: any) => d.name === assetName);
+      assert.ok(asset);
+      assert.ok(asset.schemaFingerprint, 'baseline scan records a fingerprint');
+      const baselineHealth = asset.healthScore;
+      assert.strictEqual(governanceIssues.filter((i: any) => i.dataAssetId === asset.id && i.issueType === 'SCHEMA_DRIFT').length, 0);
+
+      // Second scan — a column is added AND retyped. Same freshness/rowcount,
+      // so any health drop is attributable to the drift penalty.
+      await request(port, 'POST', '/connectors/report', {
+        body: { assets: [{ name: assetName, rowCount: 100, lastWriteAt: fresh(), columns: [
+          { name: 'id', dataType: 'bigint' },       // retyped
+          { name: 'email', dataType: 'text' },
+          { name: 'created_at', dataType: 'timestamp' }, // added
+        ] } ] },
+        bearer: token,
+      });
+      const drifted = dataAssets.find((d: any) => d.name === assetName);
+      assert.ok(drifted.healthScore < baselineHealth, 'drift lowers the health score');
+      const open = governanceIssues.filter((i: any) => i.dataAssetId === asset.id && i.issueType === 'SCHEMA_DRIFT' && i.status === 'OPEN');
+      assert.strictEqual(open.length, 1, 'a schema-drift issue is raised');
+      assert.strictEqual(open[0].severity, 'MEDIUM');
+
+      // Third scan — schema matches the drifted set (no further change): the
+      // fingerprint is stable, so the open drift issue auto-resolves.
+      await request(port, 'POST', '/connectors/report', {
+        body: { assets: [{ name: assetName, rowCount: 100, lastWriteAt: fresh(), columns: [
+          { name: 'id', dataType: 'bigint' },
+          { name: 'email', dataType: 'text' },
+          { name: 'created_at', dataType: 'timestamp' },
+        ] } ] },
+        bearer: token,
+      });
+      const stillOpen = governanceIssues.filter((i: any) => i.dataAssetId === asset.id && i.issueType === 'SCHEMA_DRIFT' && i.status === 'OPEN');
+      assert.strictEqual(stillOpen.length, 0, 'a stable rescan auto-resolves the drift issue');
     });
 
     it('GET /:id/events returns the connector\'s recent events newest-first', async () => {

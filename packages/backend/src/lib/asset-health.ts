@@ -18,16 +18,25 @@ export interface DiscoveredAssetHealthInput {
   rowCount?: number | null;
   /** Row count recorded by the previous scan, if any (activity signal). */
   previousRowCount?: number | null;
+  /** True when this scan's schema (column set) drifted from the previously
+   *  fingerprinted one — a column added, removed, or retyped. An unexpected
+   *  schema change is a real risk to downstream consumers, so it lowers the
+   *  score. Undefined/false when there is no drift or no schema signal. */
+  schemaDrift?: boolean;
   /** Injected clock for testability; defaults to now. */
   nowMs?: number;
 }
 
 /**
- * Grade a discovered asset's freshness into a 0–100 health score.
+ * Grade a discovered asset's freshness / liveness into a 0–100 health score.
  *
- * Freshness decays by age since the last write; an empty table is capped
- * low regardless of write time; and a row count that changed since the last
- * scan earns a small "actively maintained" bump.
+ * Signals, in order:
+ *   - Freshness decays by age since the last write.
+ *   - An empty table is capped low regardless of write time.
+ *   - A row count that *shrank* since the last scan is graded by magnitude
+ *     (a table that lost half its rows is a stronger concern than one that
+ *     lost a few); growth earns a small "actively maintained" bump.
+ *   - Schema drift (a changed column set) applies a fixed penalty.
  */
 export function computeDiscoveredAssetHealth(input: DiscoveredAssetHealthInput): number {
   const now = input.nowMs ?? Date.now();
@@ -54,16 +63,30 @@ export function computeDiscoveredAssetHealth(input: DiscoveredAssetHealthInput):
     // An empty table is a liveness concern no matter how recently it was
     // touched — cap the score low.
     score = Math.min(score, 35);
-  } else if (
-    rowCount !== null &&
-    typeof input.previousRowCount === 'number' &&
-    rowCount !== input.previousRowCount
-  ) {
-    // Row count moved since the last scan → the table is actively changing.
-    score = Math.min(100, score + 5);
+  } else if (rowCount !== null && typeof input.previousRowCount === 'number') {
+    const prev = input.previousRowCount;
+    if (prev > 0 && rowCount < prev) {
+      // The table shrank since the last scan. A large drop often signals a
+      // broken load (a truncated / half-loaded table), so grade by magnitude.
+      const dropRatio = (prev - rowCount) / prev;
+      if (dropRatio >= 0.5) score = Math.min(score, 40);        // lost half or more
+      else if (dropRatio >= 0.2) score = Math.min(score, 65);   // notable shrink
+      else score = Math.min(100, score + 5);                    // minor churn — still active
+    } else if (rowCount !== prev) {
+      // Grew (or recovered from empty) → the table is actively maintained.
+      score = Math.min(100, score + 5);
+    }
   }
 
-  return Math.round(score);
+  // ── Schema drift ──
+  // A changed column set since the last fingerprinted scan is an early
+  // warning: silent schema changes are a classic cause of broken downstream
+  // reports. Apply a fixed penalty after the row-count signals.
+  if (input.schemaDrift) {
+    score = score - 15;
+  }
+
+  return Math.round(Math.max(0, Math.min(100, score)));
 }
 
 // ── Effective (display-facing) asset health ────────────────────────────────

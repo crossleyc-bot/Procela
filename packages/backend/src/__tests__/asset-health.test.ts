@@ -52,6 +52,35 @@ describe('computeDiscoveredAssetHealth', () => {
     const lo = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(9999), rowCount: 0, nowMs: NOW });
     assert.ok(lo >= 0);
   });
+
+  it('grades a row-count shrink by magnitude', () => {
+    // Fresh write (95) so the row-count band is what moves the number.
+    const severe = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(0.5), rowCount: 40, previousRowCount: 100, nowMs: NOW });
+    const notable = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(0.5), rowCount: 75, previousRowCount: 100, nowMs: NOW });
+    const minor = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(3), rowCount: 98, previousRowCount: 100, nowMs: NOW });
+    assert.strictEqual(severe, 40);   // lost ≥50% — capped low
+    assert.strictEqual(notable, 65);  // lost ≥20% — notable shrink
+    assert.strictEqual(minor, 90);    // <20% churn keeps the actively-maintained bump
+  });
+
+  it('growth still earns the actively-maintained bump, not a shrink penalty', () => {
+    const grew = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(3), rowCount: 500, previousRowCount: 100, nowMs: NOW });
+    assert.strictEqual(grew, 90); // 85 + 5
+  });
+
+  it('penalizes schema drift', () => {
+    const stable = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(0.5), rowCount: 100, previousRowCount: 100, nowMs: NOW });
+    const drifted = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(0.5), rowCount: 100, previousRowCount: 100, schemaDrift: true, nowMs: NOW });
+    assert.strictEqual(stable, 95);
+    assert.strictEqual(drifted, 80); // 95 − 15
+  });
+
+  it('combines a shrink penalty with a drift penalty, clamped at 0', () => {
+    const both = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(0.5), rowCount: 40, previousRowCount: 100, schemaDrift: true, nowMs: NOW });
+    assert.strictEqual(both, 25); // 40 (severe shrink) − 15 (drift)
+    const floor = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(9999), rowCount: 0, schemaDrift: true, nowMs: NOW });
+    assert.strictEqual(floor, 20); // 35 (empty cap) − 15, still ≥ 0
+  });
 });
 
 describe('countMeasuredRulesByAsset', () => {
