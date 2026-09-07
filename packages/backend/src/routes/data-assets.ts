@@ -23,6 +23,11 @@ import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { countMeasuredRulesByAsset, effectiveHealthScore } from '../lib/asset-health';
+import { computeRescanHealth } from '../lib/schema-drift';
+// Type-only import — the runtime function is require()'d lazily at the call
+// site because governance-issues.ts imports `dataAssets` from this module,
+// so a static value import would close an initialization cycle.
+import type { SchemaDriftEvent } from './governance-issues';
 import { requireAiEnabled } from '../middleware/ai-enabled';
 
 export interface StoredDataAsset {
@@ -1569,7 +1574,7 @@ router.get('/reconcile/:connectionId', async (req: Request, res: Response) => {
   const { discoverAssets } = require('../services/connector.service');
   const result = await discoverAssets(conn);
   if (!result.success) { res.status(502).json({ success: false, error: result.message || 'Discovery failed' }); return; }
-  const discovered = (result.details?.assets || []) as Array<{ name: string; type?: string; columns?: string[] }>;
+  const discovered = (result.details?.assets || []) as Array<{ name: string; type?: string; columns?: string[]; rowCount?: number | null }>;
 
   const orgAssets = (await dataAssetsRepo.list()).filter((a) => a.orgId === conn.orgId);
   const bindings = await dataAssetBindingsRepo.list();
@@ -1581,7 +1586,7 @@ router.get('/reconcile/:connectionId', async (req: Request, res: Response) => {
   const nameOf = (id: string) => orgAssets.find((a) => a.id === id)?.name || 'Unknown asset';
 
   const items = discovered.map((d) => {
-    const base = { sourceAsset: d.name, type: d.type || 'TABLE', columns: d.columns || [] };
+    const base = { sourceAsset: d.name, type: d.type || 'TABLE', columns: d.columns || [], rowCount: d.rowCount ?? null };
     const linkedId = linkedBySource.get(d.name.toLowerCase());
     if (linkedId) {
       return { ...base, status: 'linked', linkedAssetId: linkedId, linkedAssetName: nameOf(linkedId) };
@@ -1637,6 +1642,58 @@ router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
     auditService.log(asset.orgId, null, 'DataAssetBinding', binding.id, 'CREATE', null, binding);
   };
 
+  // Re-run discovery once to get authoritative, server-side row counts and
+  // column sets for this connection — the same live scan the connector's
+  // report path carries. Best-effort: if it fails (or returns nothing for a
+  // source), we still apply the user's decisions, just without the drift /
+  // row-count health enrichment for that asset.
+  const scanByName = new Map<string, { rowCount: number | null; columns: string[] }>();
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { discoverAssets } = require('../services/connector.service');
+    const disc = await discoverAssets(conn);
+    if (disc?.success) {
+      for (const a of (disc.details?.assets || []) as Array<{ name?: string; columns?: string[]; rowCount?: number | null }>) {
+        const nm = String(a?.name || '');
+        if (nm) scanByName.set(nm.toLowerCase(), {
+          rowCount: typeof a?.rowCount === 'number' ? a.rowCount : null,
+          columns: Array.isArray(a?.columns) ? a.columns.map(String) : [],
+        });
+      }
+    }
+  } catch { /* enrichment is best-effort */ }
+
+  // Drift verdicts for assets re-linked this run, reconciled into governance
+  // issues after the loop (batched, off the per-decision path).
+  const driftEvents: SchemaDriftEvent[] = [];
+
+  // Refresh an existing asset's row count, schema fingerprint, and liveness
+  // health from this scan, and record whether its schema drifted. A first
+  // fingerprint just establishes the baseline; a changed one lowers the score
+  // and raises a SCHEMA_DRIFT issue below.
+  const rescanExisting = async (asset: StoredDataAsset, source: string): Promise<void> => {
+    const scan = scanByName.get(source.toLowerCase());
+    if (!scan) return; // no live scan data for this source — leave health as-is
+    const res = computeRescanHealth({
+      previousFingerprint: asset.schemaFingerprint ?? null,
+      previousRowCount: typeof asset.rowCount === 'number' ? asset.rowCount : null,
+      columns: scan.columns.map((c) => ({ name: c })),
+      rowCount: scan.rowCount,
+    });
+    if (scan.rowCount !== null) asset.rowCount = scan.rowCount;
+    if (res.schemaFingerprint) asset.schemaFingerprint = res.schemaFingerprint;
+    asset.healthScore = res.healthScore;
+    asset.updatedAt = iso();
+    await dataAssetsRepo.update(asset.id, asset);
+    if (res.schemaFingerprint) {
+      driftEvents.push({
+        asset: { id: asset.id, name: asset.name, systemId: asset.systemId || null, ownerPersonId: asset.ownerPersonId || null },
+        drifted: res.drifted,
+        columnCount: scan.columns.length,
+      });
+    }
+  };
+
   const summary = { linked: 0, created: 0, skipped: 0, errors: [] as string[] };
   for (const d of decisions) {
     const sourceAsset = String(d?.sourceAsset || '').trim();
@@ -1646,16 +1703,27 @@ router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
       if (action === 'link') {
         const asset = await dataAssetsRepo.get(String(d.dataAssetId || ''));
         if (!asset || asset.orgId !== conn.orgId) { summary.errors.push(`${sourceAsset}: target asset not found`); continue; }
+        // Refresh health + fingerprint and detect drift against this asset's
+        // stored baseline before binding the (possibly new) source.
+        await rescanExisting(asset, sourceAsset);
         await bindSource(asset, sourceAsset, d.columns);
         summary.linked++;
       } else if (action === 'create') {
         const name = (String(d.dataAssetName || '').trim()) || sourceAsset;
+        // First sighting establishes the fingerprint baseline (never drift)
+        // and seeds the liveness health from this scan's row count.
+        const scan = scanByName.get(sourceAsset.toLowerCase());
+        const res = scan
+          ? computeRescanHealth({ columns: scan.columns.map((c) => ({ name: c })), rowCount: scan.rowCount })
+          : null;
         const asset: StoredDataAsset = {
           id: uuid(), orgId: conn.orgId, name, description: '',
           systemId: (Array.isArray(conn.systemIds) && conn.systemIds[0]) || '',
           owner: '', stewardIds: [], governanceTier: 'BRONZE',
-          healthScore: 0, origin: 'DISCOVERED',
+          healthScore: res ? res.healthScore : 0, origin: 'DISCOVERED',
           sourceConnectionId: connectionId, sourceAsset,
+          ...(scan && scan.rowCount !== null ? { rowCount: scan.rowCount } : {}),
+          ...(res && res.schemaFingerprint ? { schemaFingerprint: res.schemaFingerprint } : {}),
           createdAt: iso(), updatedAt: iso(),
         };
         await dataAssetsRepo.create(asset);
@@ -1668,6 +1736,18 @@ router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
     } catch (err) {
       summary.errors.push(`${sourceAsset}: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  // Raise / resolve schema-drift issues for the assets re-linked this run.
+  // Best-effort + lazy require (governance-issues imports this module, so a
+  // static import would close an init cycle) — a hiccup must not fail the
+  // reconcile, which is the user's actual action.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { reconcileSchemaDriftIssues } = require('./governance-issues');
+    await reconcileSchemaDriftIssues(conn.orgId, driftEvents);
+  } catch (err) {
+    logger.warn({ err, connectionId }, 'Schema-drift issue reconciliation failed during reconcile');
   }
 
   auditService.log(conn.orgId, null, 'ConnectionProfile', connectionId, 'RECONCILE', null, summary);

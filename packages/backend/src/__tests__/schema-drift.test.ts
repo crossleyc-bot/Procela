@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import { computeSchemaFingerprint, hasSchemaDrifted } from '../lib/schema-drift';
+import { computeSchemaFingerprint, hasSchemaDrifted, computeRescanHealth } from '../lib/schema-drift';
 
 describe('computeSchemaFingerprint', () => {
   it('is order-independent and case/whitespace-insensitive', () => {
@@ -54,5 +54,46 @@ describe('hasSchemaDrifted', () => {
     assert.strictEqual(hasSchemaDrifted(null, 'bbb'), false);     // first fingerprint — establishes baseline
     assert.strictEqual(hasSchemaDrifted('aaa', null), false);     // column-less scan — no signal
     assert.strictEqual(hasSchemaDrifted(undefined, undefined), false);
+  });
+});
+
+describe('computeRescanHealth (direct-connect discover/reconcile)', () => {
+  const cols = (names: string[]) => names.map((name) => ({ name }));
+
+  it('first sighting establishes a fingerprint and never reports drift', () => {
+    const r = computeRescanHealth({ columns: cols(['id', 'email']), rowCount: 100 });
+    assert.ok(r.schemaFingerprint);
+    assert.strictEqual(r.drifted, false);
+    // No freshness signal + a stable/first row count → neutral-ish base, no penalty.
+    assert.ok(r.healthScore > 0 && r.healthScore <= 100);
+  });
+
+  it('an unchanged column set on a re-scan does not drift', () => {
+    const base = computeSchemaFingerprint(cols(['id', 'email']));
+    const r = computeRescanHealth({ previousFingerprint: base, previousRowCount: 100, columns: cols(['id', 'email']), rowCount: 100 });
+    assert.strictEqual(r.drifted, false);
+  });
+
+  it('a changed column set drifts and lowers the score vs the stable case', () => {
+    const base = computeSchemaFingerprint(cols(['id', 'email']));
+    const stable = computeRescanHealth({ previousFingerprint: base, previousRowCount: 100, columns: cols(['id', 'email']), rowCount: 100 });
+    const drifted = computeRescanHealth({ previousFingerprint: base, previousRowCount: 100, columns: cols(['id', 'email', 'created_at']), rowCount: 100 });
+    assert.strictEqual(drifted.drifted, true);
+    assert.ok(drifted.healthScore < stable.healthScore);
+  });
+
+  it('a large row-count drop lowers the score even without drift', () => {
+    const base = computeSchemaFingerprint(cols(['id']));
+    const stable = computeRescanHealth({ previousFingerprint: base, previousRowCount: 1000, columns: cols(['id']), rowCount: 1000 });
+    const shrunk = computeRescanHealth({ previousFingerprint: base, previousRowCount: 1000, columns: cols(['id']), rowCount: 200 });
+    assert.strictEqual(shrunk.drifted, false);
+    assert.ok(shrunk.healthScore < stable.healthScore);
+  });
+
+  it('carries the previous row count forward when this scan omits one', () => {
+    const base = computeSchemaFingerprint(cols(['id']));
+    // rowCount null but previousRowCount 0 → empty-table cap still applies.
+    const r = computeRescanHealth({ previousFingerprint: base, previousRowCount: 0, columns: cols(['id']), rowCount: null });
+    assert.ok(r.healthScore <= 35);
   });
 });
