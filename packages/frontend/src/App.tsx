@@ -53,6 +53,7 @@ const SettingsPage               = lazy(() => import('@/pages/SettingsPage'));
 const BrandingPage               = lazy(() => import('@/pages/BrandingPage'));
 const HelpPage                   = lazy(() => import('@/pages/HelpPage'));
 const HelpTrainingPage           = lazy(() => import('@/pages/HelpTrainingPage'));
+const RoadmapPage                = lazy(() => import('@/pages/RoadmapPage'));
 
 // Quiet placeholder shown for the millisecond or two between route
 // click and the lazy chunk arriving. A SkeletonRows-style block
@@ -148,6 +149,7 @@ export default function App() {
           <Route path="/settings/branding" element={<BrandingPage />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/help/training" element={<HelpTrainingPage />} />
+          <Route path="/roadmap" element={<RoadmapPage />} />
         </Route>
       </Routes>
     </Suspense>
