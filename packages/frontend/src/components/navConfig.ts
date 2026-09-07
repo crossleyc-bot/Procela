@@ -57,6 +57,13 @@ export function openTrainingWindow() {
   window.open('/api/v1/docs/training.pdf', 'procela-training', 'popup,width=1100,height=900,noopener,noreferrer');
 }
 
+// Same pattern for the Product Roadmap — opens the HTML rendered live from
+// docs/ROADMAP.md in its own popup. The in-app /roadmap route embeds the
+// same document; this is the popout equivalent of the Help window.
+export function openRoadmapWindow() {
+  window.open('/api/v1/docs/roadmap.html', 'procela-roadmap', 'popup,width=1100,height=900,noopener,noreferrer');
+}
+
 // Plain-noun buckets so users can find things by what they ARE, not
 // by which DAMA phase they belong to. The Organizations section is
 // the "who" of the platform — the company structure plus the humans

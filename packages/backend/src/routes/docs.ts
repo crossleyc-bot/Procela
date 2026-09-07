@@ -791,6 +791,41 @@ function readHelpGuide(): { contents: string; path: string } {
 }
 
 /**
+ * Roadmap source. The single source of truth is docs/ROADMAP.md at the repo
+ * root — the same file engineering edits directly. Served rendered at
+ * /roadmap.html (the in-app /roadmap page embeds it) so the in-app view can
+ * never drift from the markdown. Resolved via the same repo-root candidates
+ * as TRAINING.md (docs/ isn't bundled into dist/; container builds cp the
+ * docs/ tree alongside dist/). mtime-cached so an edit reloads on the next
+ * request without bouncing the server.
+ */
+const ROADMAP_CANDIDATES = [
+  // Dev: routes/docs.ts → src/routes → packages/backend → packages → repo root
+  path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'ROADMAP.md'),
+  // Built artefact: dist/routes/docs.js sits one level lower
+  path.resolve(__dirname, '..', '..', '..', '..', '..', 'docs', 'ROADMAP.md'),
+  // Container deployment where docs/ is copied next to dist/
+  path.resolve(__dirname, '..', '..', 'docs', 'ROADMAP.md'),
+];
+
+let cachedRoadmapMd: { contents: string; mtimeMs: number; path: string } | null = null;
+
+function readRoadmap(): { contents: string; path: string } {
+  for (const candidate of ROADMAP_CANDIDATES) {
+    try {
+      const stat = fs.statSync(candidate);
+      if (cachedRoadmapMd && cachedRoadmapMd.path === candidate && cachedRoadmapMd.mtimeMs === stat.mtimeMs) {
+        return { contents: cachedRoadmapMd.contents, path: cachedRoadmapMd.path };
+      }
+      const contents = fs.readFileSync(candidate, 'utf-8');
+      cachedRoadmapMd = { contents, mtimeMs: stat.mtimeMs, path: candidate };
+      return { contents, path: candidate };
+    } catch { /* try next candidate */ }
+  }
+  throw new Error('ROADMAP.md not found in any known location.');
+}
+
+/**
  * GET /api/v1/docs/training.pdf — generated PDF of the training guide.
  * Streams a Buffer back with the right Content-Disposition so it
  * renders inline in browsers' PDF viewer when opened, but also
@@ -840,6 +875,35 @@ router.get('/help.html', (_req: Request, res: Response) => {
     // scroll-spy <script>, both authored here (no user input), so allow
     // inline for this one static response. frame-ancestors 'self' lets the
     // in-app /help page embed it same-origin.
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' https: data:; frame-ancestors 'self'",
+    );
+    res.send(html);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'HTML render failed.' });
+  }
+});
+
+/**
+ * GET /api/v1/docs/roadmap.html — generated HTML of the post-cutover roadmap.
+ *
+ * The same render + headers as /help.html, sourced live from docs/ROADMAP.md
+ * (the source of truth). The in-app /roadmap page embeds this in a same-origin
+ * iframe; edit the markdown and the rendered page follows on the next request.
+ */
+router.get('/roadmap.html', (_req: Request, res: Response) => {
+  try {
+    const { contents } = readRoadmap();
+    const html = renderMarkdownToHtml(contents, {
+      title: 'Procela Roadmap',
+      subtitle: 'Post-cutover roadmap — the four frontiers beyond v1.',
+    });
+    res.type('text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    // Same rationale as /help.html: a static, read-only, credential-free
+    // reference doc, embedded same-origin by the in-app /roadmap page.
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' https: data:; frame-ancestors 'self'",

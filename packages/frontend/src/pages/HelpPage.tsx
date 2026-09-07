@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import Page from '../components/Page';
-import { openTrainingWindow } from '../components/navConfig';
+import { openTrainingWindow, openRoadmapWindow } from '../components/navConfig';
 
 // The help guide has a single source of truth: the markdown at
 // packages/backend/src/docs/HELP.md, rendered server-side at
@@ -52,6 +52,19 @@ export default function HelpPage() {
               title="Opens in a new window — 90-minute walkthrough using the Tidewater Utilities fixture data"
             >
               Open Training Guide ↗
+            </button>
+            <button
+              type="button"
+              onClick={openRoadmapWindow}
+              style={{
+                padding: '8px 16px', background: 'var(--color-surface)',
+                color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+                borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                flexShrink: 0,
+              }}
+              title="Opens the product roadmap — rendered live from docs/ROADMAP.md"
+            >
+              Product roadmap ↗
             </button>
             <button
               type="button"

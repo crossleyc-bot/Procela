@@ -290,8 +290,10 @@ export default function Layout() {
   // button. Close prefers window.close() (these pages are opened in
   // their own popup), then history.back(), then falls back to "/"
   // for deep links.
-  const isReadingMode = location.pathname === '/help' || location.pathname === '/help/training';
-  const readingModeLabel = location.pathname === '/help/training' ? 'Training Guide' : 'Help Guide';
+  const isReadingMode = location.pathname === '/help' || location.pathname === '/help/training' || location.pathname === '/roadmap';
+  const readingModeLabel = location.pathname === '/help/training' ? 'Training Guide'
+    : location.pathname === '/roadmap' ? 'Product Roadmap'
+    : 'Help Guide';
   if (isReadingMode) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' }}>
