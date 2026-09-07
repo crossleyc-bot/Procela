@@ -15,6 +15,8 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { getConnectorsRepository } from '../db/connectors.repo';
 import { getConnectorEventsRepository } from '../db/connector-events.repo';
 import { computeDiscoveredAssetHealth } from '../lib/asset-health';
+import { computeSchemaFingerprint, hasSchemaDrifted } from '../lib/schema-drift';
+import { reconcileSchemaDriftIssues, type SchemaDriftEvent } from './governance-issues';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Connectors — the on-prem agent surface.
@@ -412,6 +414,8 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
   const assetUpdates: typeof allAssets = [];
   const columnCreates: StoredDataAssetColumn[] = [];
   const columnUpdates: StoredDataAssetColumn[] = [];
+  // Schema-drift verdicts, reconciled into governance issues after the flush.
+  const driftEvents: SchemaDriftEvent[] = [];
 
   for (const a of incoming) {
     const name = String(a?.name || '').trim();
@@ -419,25 +423,43 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
     const systemId = String(a?.systemId || '').trim();
     const rowCount = typeof a?.rowCount === 'number' ? a.rowCount : null;
     const lastWriteAt = typeof a?.lastWriteAt === 'string' ? a.lastWriteAt : null;
+    // Fingerprint this scan's column set (null when the agent omits columns)
+    // so we can compare it against the stored baseline for schema drift.
+    const incomingFingerprint = computeSchemaFingerprint(Array.isArray(a?.columns) ? a.columns : null);
+    const reportedColumnCount = Array.isArray(a?.columns) ? a.columns.length : undefined;
     const existing = allAssets.find((d) => d.orgId === row.orgId && d.name === name);
     let assetId: string;
     if (existing) {
       // Capture the previous row count BEFORE overwriting it — the delta vs
       // this scan is an "actively maintained" signal for the health score.
       const previousRowCount = typeof (existing as any).rowCount === 'number' ? (existing as any).rowCount : null;
+      // Detect schema drift against the stored fingerprint before overwriting
+      // it. Only a scan that actually reported columns carries a signal.
+      const drifted = hasSchemaDrifted((existing as any).schemaFingerprint, incomingFingerprint);
+      if (incomingFingerprint) {
+        driftEvents.push({
+          asset: { id: existing.id, name, systemId: existing.systemId || null, ownerPersonId: (existing as any).ownerPersonId || null },
+          drifted,
+          columnCount: reportedColumnCount,
+        });
+      }
       // Persist the reported row count. Only overwrite when this scan
       // actually reported one, so an older agent that omits rowCount
       // never nulls a value a newer scan recorded.
       if (rowCount !== null) (existing as any).rowCount = rowCount;
       if (lastWriteAt) (existing as any).healthScoreAt = lastWriteAt;
-      // Graded freshness health: decays by age since last write, caps an
-      // empty table low, and bumps a table whose row count changed since the
-      // last scan. Falls back to the persisted row count when this scan
-      // omitted one, so the empty-table check still applies.
+      // Refresh the fingerprint baseline only when this scan reported columns,
+      // so an older column-less agent never clears it.
+      if (incomingFingerprint) (existing as any).schemaFingerprint = incomingFingerprint;
+      // Graded freshness/liveness health: decays by age since last write, caps
+      // an empty table low, grades a row-count shrink by magnitude, and applies
+      // a penalty when the schema drifted. Falls back to the persisted row
+      // count when this scan omitted one, so the empty-table check still holds.
       existing.healthScore = computeDiscoveredAssetHealth({
         lastWriteAt,
         rowCount: rowCount ?? previousRowCount,
         previousRowCount,
+        schemaDrift: drifted,
       });
       existing.updatedAt = nowIso();
       // Tag the asset with the connector that owns its freshness
@@ -463,6 +485,8 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
         lastSyncedByConnectorId: row.id,
         lastSyncedAt: now,
         ...(rowCount !== null ? { rowCount } : {}),
+        // First sighting establishes the drift baseline — never itself drift.
+        ...(incomingFingerprint ? { schemaFingerprint: incomingFingerprint } : {}),
       } as any;
       assetCreates.push(newAsset);
       allAssets.push(newAsset);
@@ -514,6 +538,15 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
   await Promise.all(assetUpdates.map((a) => dataAssetsRepo.update(a.id, a)));
   await Promise.all(columnCreates.map((c) => dataAssetColumnsRepo.create(c)));
   await Promise.all(columnUpdates.map((c) => dataAssetColumnsRepo.update(c.id, c)));
+
+  // Raise / resolve schema-drift issues for assets whose column set moved (or
+  // stabilized) since the last scan. Best-effort: a hiccup here must not fail
+  // the report ingest, which is the connector's primary contract.
+  try {
+    await reconcileSchemaDriftIssues(row.orgId, driftEvents);
+  } catch (err) {
+    logger.warn({ err, connectorId: row.id }, 'Schema-drift issue reconciliation failed');
+  }
 
   await connectorsRepo.update(row.id, { lastHeartbeatAt: nowIso(), updatedAt: nowIso() });
   await connectorEventsRepo.create({

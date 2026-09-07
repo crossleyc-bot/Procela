@@ -62,6 +62,7 @@ type PrismaAssetRow = {
   // Prisma returns BigInt columns as JS bigint; the app layer narrows it
   // back to a plain number (row counts are far below 2^53).
   rowCount: bigint | null;
+  schemaFingerprint?: string | null;
   createdAt: Date;
   updatedAt: Date;
   stewards?: Array<{ personId: string }>;
@@ -106,6 +107,7 @@ function fromPrisma(r: PrismaAssetRow): StoredDataAsset {
     ...(r.lastSyncedByConnectorId ? { lastSyncedByConnectorId: r.lastSyncedByConnectorId } : {}),
     ...(r.lastSyncedAt ? { lastSyncedAt: r.lastSyncedAt.toISOString() } : {}),
     ...(r.rowCount !== null && r.rowCount !== undefined ? { rowCount: Number(r.rowCount) } : {}),
+    ...(r.schemaFingerprint ? { schemaFingerprint: r.schemaFingerprint } : {}),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -142,6 +144,7 @@ function toPrismaData(row: Partial<StoredDataAsset>): Record<string, unknown> {
     // fractional noise. null clears it.
     data.rowCount = row.rowCount === null ? null : BigInt(Math.trunc(row.rowCount));
   }
+  if (row.schemaFingerprint !== undefined) data.schemaFingerprint = row.schemaFingerprint ?? null;
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   // updatedAt is Prisma-managed via @updatedAt.
   return data;
