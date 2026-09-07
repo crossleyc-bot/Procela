@@ -51,9 +51,15 @@ remaining item is proving it end to end against a real customer database.*
   `health_score` from real DQ results for the five pushdown-safe rule types
   (null-rate via NOT_NULL, uniqueness, set/range/length checks); the
   direct-Connection DQ-simulation gap is closed, so a cloud-reachable
-  database measures too. Freshness/row-count already drive the connector's
-  discovered-asset health. Remaining: schema-drift and row-count-delta
-  signals.
+  database measures too. Freshness/row-count already drove the connector's
+  discovered-asset health, now joined by **schema-drift** (a persisted
+  column-set fingerprint on `DataAsset` is compared each scan — a changed
+  column set penalizes the health score and raises an auto-resolving
+  `SCHEMA_DRIFT` governance issue) and a **graded row-count-delta** (a shrink
+  scored by magnitude). Both are wired on the connector report ingest.
+  Remaining: extend the two signals to the cloud-reachable direct-connect
+  discover/reconcile path, which does not yet collect row counts during
+  introspection.
 
 ## Track B — production-scale hardening
 
