@@ -510,6 +510,22 @@ export default function DataDomainsPage() {
   const updateSub = (di: number, si: number, patch: Partial<GenSub>) => setGenTree((t) => t.map((d, i) => (i === di ? { ...d, subDomains: d.subDomains.map((s, j) => (j === si ? { ...s, ...patch } : s)) } : d)));
   const addSub = (di: number) => setGenTree((t) => t.map((d, i) => (i === di ? { ...d, subDomains: [...d.subDomains, { name: '', description: '', selected: true }] } : d)));
   const removeSub = (di: number, si: number) => setGenTree((t) => t.map((d, i) => (i === di ? { ...d, subDomains: d.subDomains.filter((_, j) => j !== si) } : d)));
+  // Reparent a sub-domain onto a different top-level domain in the tree. The
+  // sub keeps its name / description / selected state and lands at the end of
+  // the target's list (same as a freshly added one). Conflict detection needs
+  // no special-casing: subConflict keys off the sub's *current* domain, so a
+  // move into a parent that already holds that name lights up the duplicate
+  // warning and blocks Apply automatically.
+  const moveSub = (fromDi: number, si: number, toDi: number) => setGenTree((t) => {
+    if (fromDi === toDi || !t[fromDi] || !t[toDi]) return t;
+    const sub = t[fromDi].subDomains[si];
+    if (!sub) return t;
+    return t.map((d, i) => {
+      if (i === fromDi) return { ...d, subDomains: d.subDomains.filter((_, j) => j !== si) };
+      if (i === toDi) return { ...d, subDomains: [...d.subDomains, sub] };
+      return d;
+    });
+  });
   const addTopDomain = () => setGenTree((t) => [...t, { name: '', description: '', selected: true, subDomains: [] }]);
   const removeTopDomain = (di: number) => setGenTree((t) => t.filter((_, i) => i !== di));
 
@@ -1168,6 +1184,20 @@ export default function DataDomainsPage() {
                               <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>
                               <input type="checkbox" aria-label={`Include ${sub.name || 'new sub-domain'}`} checked={sub.selected} onChange={() => updateSub(di, si, { selected: !sub.selected })} style={{ flexShrink: 0 }} />
                               <input aria-label="Sub-domain name" value={sub.name} onChange={(e) => updateSub(di, si, { name: e.target.value })} placeholder="Sub-domain name" style={{ flex: 1, minWidth: 0, fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', background: 'var(--color-surface)', color: 'var(--color-text)' }} />
+                              {genTree.length > 1 && (
+                                <select
+                                  aria-label="Move sub-domain to another domain"
+                                  title="Move to another domain"
+                                  value=""
+                                  onChange={(e) => { const to = Number(e.target.value); if (Number.isInteger(to)) moveSub(di, si, to); }}
+                                  style={{ flexShrink: 0, fontSize: 11, border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 4px', background: 'var(--color-surface)', color: 'var(--color-text-muted)', cursor: 'pointer', maxWidth: 130 }}
+                                >
+                                  <option value="">Move to…</option>
+                                  {genTree.map((d2, di2) => (di2 !== di ? (
+                                    <option key={di2} value={di2}>{d2.name.trim() || `Untitled domain ${di2 + 1}`}</option>
+                                  ) : null))}
+                                </select>
+                              )}
                               <button type="button" aria-label="Remove sub-domain" onClick={() => removeSub(di, si)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
                             </div>
                             {dupSub && <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 2, paddingLeft: 41 }}>Duplicate name under this parent.</div>}
