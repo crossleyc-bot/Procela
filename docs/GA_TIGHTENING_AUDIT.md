@@ -232,9 +232,13 @@ before the real drivers land.
     measures data quality live over the connection for the five pushdown-safe
     rule types (`lib/db-source/dq-sql.ts` + `services/dq-db.ts`), and offers a
     suggest-and-confirm **reconciliation** flow that folds discovered assets
-    into the governed catalog. Only API/WAREHOUSE/SPREADSHEET types and the
-    REGEX_MATCH/CUSTOM rule types remain simulated-and-labelled. See
-    `docs/ROADMAP.md` Track A.
+    into the governed catalog. Discovered-asset **health** now grades change
+    over time on both scan paths (on-prem connector report + direct-connect
+    reconcile): a persisted schema fingerprint flags a changed column set —
+    raising an auto-resolving `SCHEMA_DRIFT` governance issue — and a graded
+    row-count-delta penalizes a shrink (`lib/schema-drift.ts`). Only
+    API/WAREHOUSE/SPREADSHEET types and the REGEX_MATCH/CUSTOM rule types remain
+    simulated-and-labelled. See `docs/ROADMAP.md` Track A.
 - **`SyncConnection` DATABASE source** — _(interim; superseded — see the
   §F live-driver outcome below.)_ Was relabelled "Database Table (simulated)"
   while drivers were unwired; the source now connects for real (Postgres /

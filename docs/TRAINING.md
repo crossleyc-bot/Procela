@@ -285,8 +285,10 @@ from a fresh org — but the hub makes it obvious what's still missing.
 The Help button lives in the **top bar next to Ask AI**, not in
 the sidebar. Clicking it opens the guide in a popup window so
 you keep whatever page you were on. The Training Guide follows
-the same pattern. Direct-URL deep links (like `/help#connectors`)
-still resolve.
+the same pattern, and a **Product roadmap ↗** button on the Help
+guide's header opens the live product roadmap — rendered from
+`docs/ROADMAP.md`, the single source of truth. Direct-URL deep
+links (like `/help#connectors` and `/roadmap`) still resolve.
 
 ---
 
@@ -402,6 +404,13 @@ Add one control if you have any defined (e.g. NERC CIP-007 R2.1
 from your Governance seed). Delete that control later on Governance
 Documents and watch this picker — the chip disappears
 automatically. No dangling references.
+
+Activities also carry free-form **Compliance tags** (SOX, HIPAA,
+GDPR, …). The *set you can pick from* is curated per tenant under
+**Settings → Data → Compliance frameworks**, so each org tags
+against the frameworks it actually answers to — add your own, or
+reset to the built-in list. (For the tighter policy↔execution loop,
+prefer Controls above; Compliance tags are the lightweight label.)
 
 Why this matters: a regulator asking *"what's the RTO and RPO for
 outage triage?"* now gets a real answer from the platform — recovery
@@ -560,6 +569,10 @@ branch, or use **Collapse all / Expand all** at the top of the index
 to tame a long catalog. The fold state is remembered per
 organization. Long domain and sub-domain names clip to one line and
 reveal the full label on hover, so the rows stay a uniform height.
+When you use the *Generate domains* wand, its review tree lets you
+edit, add, or drop rows **and move a sub-domain to a different parent**
+(a *Move to…* picker on each sub-domain row) before you apply — so a
+misfiled sub-domain is a one-click reparent, not a delete-and-re-add.
 
 The domain assignments feed the Governance Groups page in Module 8.
 
@@ -599,6 +612,8 @@ In this training you're typing the assets in by hand — fine for a demo. In pro
 2. **On-prem connector.** A small container the customer runs *inside their network*. It scans configured Postgres, SQL Server, or MySQL databases every 30 minutes and reports catalog metadata to Procela over an outbound HTTPS connection. Connection strings never leave the on-prem host. Use this when Procela cannot reach the source directly.
 
 Either way, discovered assets arrive as **Bronze** tier, unowned, unmapped — deliberately, so they show up in the Orphan Assets and Ungoverned dashboards as work items for stewards. This training doesn't spin up a real database, but the *behaviour* is worth knowing: a real deployment doesn't manually type in 400 tables, and it *shouldn't* auto-promote them either.
+
+Both discovery paths also watch for change over time. Each scanned asset carries a **schema fingerprint** and an approximate **row count**: when a later scan reports a changed column set, Procela lowers the asset's liveness health and raises an auto-resolving **SCHEMA_DRIFT** governance issue (a stable rescan closes it); a row-count **shrink** is graded by magnitude, so a silent truncation surfaces as a health drop rather than a quiet number. This runs on both the on-prem connector and the direct-connect discover/reconcile flow.
 
 If you're rolling out to a customer now, keep going with the training as-is, then read the **6. Systems → On-prem connectors** section of the Help Guide for the install commands and the pairing flow.
 
@@ -928,6 +943,10 @@ automatically — no cron, no external orchestrator. When a run
 transitions a rule to FAILING, Procela auto-creates a
 governance issue (severity HIGH), assigns it to the domain
 steward, and pings the assignee via the notification bell.
+Beyond rule failures, a discovered asset whose **column set
+changes between scans** raises its own auto-resolving
+**SCHEMA_DRIFT** issue the same way — so schema drift and a
+sudden row-count drop are tracked, not silent.
 When the rule recovers, the same issue auto-resolves. The
 end-to-end shape: define the rule once, walk away, and the
 platform does the rest — see the Data Quality section of the

@@ -91,6 +91,18 @@ The five pushdown-safe rule types run measured on the connector: `NOT_NULL`,
 `UNIQUE`, `IN_SET`, `NUMERIC_RANGE`, `LENGTH_RANGE`. `REGEX_MATCH` / `CUSTOM`
 still simulate.
 
+## Schema drift & row-count signals
+
+Independently of rules, each scan compares the reported column set against a
+stored **schema fingerprint** on the asset. If a column is added, removed, or
+retyped between scans, Procela lowers the asset's liveness health and opens an
+auto-resolving **`SCHEMA_DRIFT`** governance issue (a later scan that matches the
+previous schema closes it). A row-count **shrink** since the last scan is graded
+by magnitude and feeds the same score, so a truncated or half-loaded table shows
+up as a health drop. This runs on the on-prem connector report path **and** the
+direct-connect discover/reconcile path (where introspection reads approximate
+row counts from the engine's catalog statistics).
+
 ## Tuning
 
 `docker/demo/bootstrap.mjs` renders the connector config from env (set on the
