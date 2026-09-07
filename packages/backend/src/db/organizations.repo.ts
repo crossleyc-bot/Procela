@@ -64,6 +64,7 @@ type PrismaOrgRow = {
   ssoButtonLabel: string | null;
   brandPrimaryColor: string | null;
   activeSensitivityRegimes?: string[] | null;
+  activeComplianceFrameworks?: string[] | null;
   scorecardTargets?: unknown | null;
   syncConnectionId?: string | null;
   syncStatus?: string | null;
@@ -90,6 +91,7 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
     ...(r.ssoButtonLabel ? { ssoButtonLabel: r.ssoButtonLabel } : {}),
     ...(r.brandPrimaryColor ? { brandPrimaryColor: r.brandPrimaryColor } : {}),
     ...(r.activeSensitivityRegimes ? { activeSensitivityRegimes: r.activeSensitivityRegimes } : {}),
+    ...(r.activeComplianceFrameworks ? { activeComplianceFrameworks: r.activeComplianceFrameworks } : {}),
     ...(r.scorecardTargets ? { scorecardTargets: r.scorecardTargets as StoredOrg['scorecardTargets'] } : {}),
     syncConnectionId: r.syncConnectionId ?? null,
     syncStatus: r.syncStatus ?? null,
@@ -128,6 +130,7 @@ function toPrismaData(row: StoredOrg): Record<string, unknown> {
     ssoButtonLabel: row.ssoButtonLabel ?? null,
     brandPrimaryColor: row.brandPrimaryColor ?? null,
     ...(row.activeSensitivityRegimes !== undefined ? { activeSensitivityRegimes: row.activeSensitivityRegimes ?? [] } : {}),
+    ...(row.activeComplianceFrameworks !== undefined ? { activeComplianceFrameworks: row.activeComplianceFrameworks ?? [] } : {}),
     ...(row.scorecardTargets !== undefined ? { scorecardTargets: row.scorecardTargets ?? null } : {}),
     // Data-sync tracking — presence-guarded so a partial update that doesn't
     // mention them preserves the stored value (only the sync engine sets them).

@@ -109,6 +109,12 @@ model Organization {
   // (subset of CUI / ITAR / EXPORT_CONTROLLED). Defaults to all three active
   // (back-compat with the built-in set); an explicit empty [] means none.
   activeSensitivityRegimes String[]   @default(["CUI", "ITAR", "EXPORT_CONTROLLED"])
+  // Compliance frameworks selectable as activity compliance tags for this
+  // tenant (SOX / HIPAA / GDPR / …). Unlike sensitivity regimes there is no
+  // fixed enum — an org admin edits the list, so custom frameworks are allowed.
+  // Defaults to the built-in set (back-compat); an explicit empty [] means the
+  // tenant has cleared every framework.
+  activeComplianceFrameworks String[] @default(["SOX", "HIPAA", "GDPR", "PCI-DSS", "CCPA", "FERPA", "FISMA", "NERC CIP", "ISO 27001", "SOC 2", "NIST", "GLBA", "FERC", "EPA", "OSHA", "ADA", "Other"])
   // Per-tenant Council Scorecard thresholds: { coverage, classification,
   // openIssues, exceptions, openIssuesDays }. Null = use the shipped defaults
   // (80 / 70 / 0 / 0 / 30). Kept as a small JSON blob rather than five columns

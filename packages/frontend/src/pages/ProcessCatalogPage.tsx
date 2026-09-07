@@ -20,6 +20,7 @@ import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import PersonPicker from '../components/PersonPicker';
 import { GOVERNANCE_ROLES } from '../types';
 import { useDomainLensStore, useDomainLens, passesLens } from '../stores/domainLensStore';
+import { useComplianceStore, BUILTIN_COMPLIANCE_FRAMEWORKS } from '../stores/complianceStore';
 import { processDomain } from '../lib/entityDomain';
 import { useToastStore } from '../stores/toastStore';
 import { useAuthStore } from '../stores/authStore';
@@ -159,10 +160,11 @@ export const SIMPLE_LOCKED = new Set(['DEPRECATED']);
 export const REVIEW_LOCKED = new Set(['PENDING_REVIEW', 'ACTIVE', 'DEPRECATED']);
 export const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
-export const COMPLIANCE_OPTIONS = [
-  'SOX', 'HIPAA', 'GDPR', 'PCI-DSS', 'CCPA', 'FERPA', 'FISMA', 'NERC CIP',
-  'ISO 27001', 'SOC 2', 'NIST', 'GLBA', 'FERC', 'EPA', 'OSHA', 'ADA', 'Other',
-];
+// The built-in compliance-framework set. Retained as the fallback the
+// org-configurable list defaults to (see stores/complianceStore.ts); the
+// activity Compliance picker now reads the tenant's active list via
+// useComplianceFrameworks() rather than this constant directly.
+export const COMPLIANCE_OPTIONS = [...BUILTIN_COMPLIANCE_FRAMEWORKS];
 
 export const FREQUENCY_OPTIONS = [
   'Continuous', 'Real-time', 'Hourly', 'Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually', 'On-demand', 'Event-driven',
@@ -652,6 +654,12 @@ export default function ProcessCatalogPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Resolve the tenant's active compliance-framework list so the activity
+  // Compliance picker (in TreeNode) offers the org-configured set rather than
+  // the hardcoded built-in constant. Fetched here once per org rather than in
+  // each TreeNode, which renders per node.
+  useEffect(() => { void useComplianceStore.getState().fetch(activeOrgId); }, [activeOrgId]);
 
   usePolling(fetchData, 30000);
 

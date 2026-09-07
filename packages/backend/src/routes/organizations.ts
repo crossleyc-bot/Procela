@@ -58,6 +58,13 @@ export interface StoredOrg {
    *  built-in set). Universal data-sensitivity tags (PII/PHI/…) are never
    *  gated by this. */
   activeSensitivityRegimes?: string[];
+  /** Which compliance frameworks (SOX / HIPAA / GDPR / …) are selectable as
+   *  activity compliance tags for this tenant. Free-form — an org admin edits
+   *  the list, so custom frameworks are allowed (no fixed enum). Undefined =
+   *  the built-in set (back-compat with the hardcoded frontend list). Resolved
+   *  by walking up to the first ancestor that sets it, so a company can set the
+   *  framework list for its divisions. */
+  activeComplianceFrameworks?: string[];
   /** Per-tenant Council Scorecard thresholds. Undefined = use the shipped
    *  defaults (coverage 80 / classification 70 / open issues 0 / exceptions 0
    *  / open-issue age 30 days). Resolved by walking up to the first ancestor
@@ -446,6 +453,24 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       org.activeSensitivityRegimes = [...new Set(raw.filter((r) => VALID_REGIMES.includes(r)))];
     } else {
       res.status(400).json({ success: false, error: 'activeSensitivityRegimes must be an array of regime codes.' });
+      return;
+    }
+  }
+  // Compliance frameworks selectable as activity compliance tags. Free-form
+  // (admin-edited list) so there's no fixed enum — accept any array of
+  // non-empty strings, trimmed + deduped, and capped so a bad payload can't
+  // balloon the row. Empty array = the tenant cleared every framework; null
+  // clears back to the built-in default.
+  if (req.body?.activeComplianceFrameworks !== undefined) {
+    const raw = req.body.activeComplianceFrameworks;
+    if (raw === null) {
+      org.activeComplianceFrameworks = undefined;
+    } else if (Array.isArray(raw)) {
+      org.activeComplianceFrameworks = [
+        ...new Set(raw.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean)),
+      ].slice(0, 100);
+    } else {
+      res.status(400).json({ success: false, error: 'activeComplianceFrameworks must be an array of framework names.' });
       return;
     }
   }
