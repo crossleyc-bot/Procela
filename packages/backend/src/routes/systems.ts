@@ -4,6 +4,7 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { hasDatabase } from '../db/prisma';
 import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { effectiveHealthScore } from '../lib/asset-health';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
@@ -399,11 +400,10 @@ router.delete('/all', async (_req: Request, res: Response) => {
 
 /** GET /api/v1/systems */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
   const [all, allPeople, allConns, allLinks] = await Promise.all([
     systemsRepo.list(), peopleRepo().list(), connsRepo().list(), linksRepo().list(),
   ]);
-  const filtered = filterByOrgScope(all, orgId as string | undefined);
+  const filtered = scopeListForRequest(req, all);
   res.json({
     success: true,
     data: filtered.map((s) => decorate(s, all, allPeople, allConns, allLinks)),
@@ -422,6 +422,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   ]);
   const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+  if (!assertOrgAccess(req, res, sys.orgId, 'System not found')) return;
   res.json({
     success: true,
     data: {
@@ -445,6 +446,7 @@ router.get('/:id/360', async (req: Request, res: Response) => {
   ]);
   const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+  if (!assertOrgAccess(req, res, sys.orgId, 'System not found')) return;
 
   const linkedConnections = profilesForSystem(sys.id, allConns, allLinks).map((c) => ({
     id: c.id,
@@ -625,6 +627,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const all = await systemsRepo.list();
   const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+  if (!assertOrgAccess(req, res, sys.orgId, 'System not found')) return;
   const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrations, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
   if (connectivity !== undefined && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
@@ -688,6 +691,7 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const sys = await systemsRepo.get(id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+  if (!assertOrgAccess(req, res, sys.orgId, 'System not found')) return;
 
   const [allAssets, allConns, allLinks, allMappings] = await Promise.all([
     dataAssetsRepo().list(), connsRepo().list(), linksRepo().list(), mappingsRepo().list(),
@@ -704,6 +708,7 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await systemsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+  if (!assertOrgAccess(req, res, removed.orgId, 'System not found')) return;
   auditService.log(DEV_ORG_ID, null, 'System', removed.id, 'DELETE', removed, null);
   await systemsRepo.delete(removed.id);
   // Cascade: remove every connection→system link that pointed at this

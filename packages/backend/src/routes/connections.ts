@@ -4,7 +4,7 @@ import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { testConnection, discoverAssets } from '../services/connector.service';
 import { analyzeLocalFile, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
 import logger from '../lib/logger';
@@ -228,10 +228,10 @@ router.delete('/all', async (_req: Request, res: Response) => {
 
 /** GET /api/v1/connections — list all (supports ?orgId= and ?systemId= filters) */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, systemId } = req.query;
+  const { systemId } = req.query;
   const allLinks = await connectionSystemLinksRepo.list();
   let filtered = await connectionsRepo.list();
-  if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
+  filtered = scopeListForRequest(req, filtered);
   if (systemId) {
     const linkedIds = new Set(
       allLinks.filter((l) => l.systemId === (systemId as string)).map((l) => l.connectionId),
@@ -253,6 +253,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
   const links = await connectionSystemLinksRepo.list();
   res.json({ success: true, data: toPublic(conn, links) });
 });
@@ -308,6 +309,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
 
   const linksBefore = await connectionSystemLinksRepo.list();
   const before = toPublic({ ...conn }, linksBefore);
@@ -376,6 +378,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await connectionsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, removed.orgId, 'Connection profile not found')) return;
   const links = await connectionSystemLinksRepo.list();
   auditService.log(removed.orgId, null, 'ConnectionProfile', removed.id, 'DELETE', toPublic(removed, links), null);
   await connectionsRepo.delete(removed.id);
@@ -496,6 +499,7 @@ router.post(
 router.post('/:id/test', async (req: Request, res: Response) => {
   const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
 
   try {
     const result = await testConnection(conn);
@@ -535,6 +539,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
 router.post('/:id/discover', async (req: Request, res: Response) => {
   const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
 
   try {
     const result = await discoverAssets(conn);
@@ -564,6 +569,7 @@ router.post(
   async (req: Request, res: Response) => {
     const conn = await connectionsRepo.get(String(req.params.id));
     if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+    if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
 
     if (conn.connectionType !== 'FILE_STORAGE' || conn.config.storageType !== 'LOCAL') {
       res.status(400).json({ success: false, error: 'File upload only supported for FILE_STORAGE connections with storageType=LOCAL' });
@@ -665,6 +671,7 @@ router.post(
 router.post('/:id/systems', async (req: Request, res: Response) => {
   const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
   const { systemId } = req.body || {};
   if (typeof systemId !== 'string' || !systemId.trim()) {
     res.status(400).json({ success: false, error: 'systemId is required' });
@@ -689,6 +696,7 @@ router.post('/:id/systems', async (req: Request, res: Response) => {
 router.delete('/:id/systems/:systemId', async (req: Request, res: Response) => {
   const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
   const { systemId } = req.params;
   const allLinks = await connectionSystemLinksRepo.list();
   const link = allLinks.find((l) => l.connectionId === conn.id && l.systemId === systemId);
@@ -702,6 +710,7 @@ router.delete('/:id/systems/:systemId', async (req: Request, res: Response) => {
 router.get('/:id/systems', async (req: Request, res: Response) => {
   const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
   const allLinks = await connectionSystemLinksRepo.list();
   res.json({
     success: true,

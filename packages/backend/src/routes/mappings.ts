@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { effectiveHealthScore } from '../lib/asset-health';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
@@ -213,8 +213,7 @@ router.delete('/all', async (_req: Request, res: Response) => {
 
 /** GET /api/v1/mappings */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = filterByOrgScope(await mappingsRepo.list(), orgId as string | undefined);
+  const filtered = scopeListForRequest(req, await mappingsRepo.list());
   const ctx = await buildEnrichContext();
   const enriched = filtered.map((m) => enrichMapping(m, ctx));
   res.json({ success: true, data: enriched });
@@ -293,6 +292,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Mapping not found' });
     return;
   }
+  if (!assertOrgAccess(req, res, mapping.orgId, 'Mapping not found')) return;
 
   const { processStepId, dataAssetId, linkType, notes, aiSuggested, userOverridden,
     criticality, dataFormat, sla, qualityRequirement, fulfillsExpected } = req.body;
@@ -325,11 +325,13 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/mappings/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = await mappingsRepo.delete(String(req.params.id));
-  if (!removed) {
+  const mapping = (await mappingsRepo.list()).find((m) => m.id === req.params.id);
+  if (!mapping) {
     res.status(404).json({ success: false, error: 'Mapping not found' });
     return;
   }
+  if (!assertOrgAccess(req, res, mapping.orgId, 'Mapping not found')) return;
+  await mappingsRepo.delete(mapping.id);
   res.status(204).send();
 });
 
