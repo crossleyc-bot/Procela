@@ -25,6 +25,10 @@ export interface DiscoveredAsset {
    *  engine didn't report one (a view, un-analyzed table, or a stats view the
    *  connecting user can't read). */
   rowCount?: number;
+  /** Column name → data type, when the catalog reported types. Lets the schema
+   *  fingerprint include the type so a column *retype* counts as drift, not
+   *  just an add/remove. Absent for an older scan that returned names only. */
+  columnTypes?: Record<string, string>;
 }
 
 /** Default catalog scope per engine when the connection didn't set a schema.
@@ -75,21 +79,23 @@ export function buildTableListSql(dbType: DbSourceType, schema: string): string 
 
 /**
  * Build the column list query for a schema. Returns rows of
- * (table_name, column_name, ordinal_position). Bounded by MAX_DISCOVERED_COLUMNS.
+ * (table_name, column_name, data_type, ordinal_position). `data_type` lets
+ * the schema fingerprint detect a column *retype* (not just add/remove).
+ * Bounded by MAX_DISCOVERED_COLUMNS.
  */
 export function buildColumnListSql(dbType: DbSourceType, schema: string): string {
   const s = escapeLiteral(schema);
   switch (dbType) {
     case 'POSTGRESQL':
     case 'MYSQL':
-      return `SELECT table_name, column_name, ordinal_position FROM information_schema.columns `
+      return `SELECT table_name, column_name, data_type, ordinal_position FROM information_schema.columns `
         + `WHERE table_schema = '${s}' ORDER BY table_name, ordinal_position LIMIT ${MAX_DISCOVERED_COLUMNS}`;
     case 'SQLSERVER':
-      return `SELECT TOP (${MAX_DISCOVERED_COLUMNS}) table_name, column_name, ordinal_position FROM information_schema.columns `
+      return `SELECT TOP (${MAX_DISCOVERED_COLUMNS}) table_name, column_name, data_type, ordinal_position FROM information_schema.columns `
         + `WHERE table_schema = '${s}' ORDER BY table_name, ordinal_position`;
     case 'ORACLE': {
       const owner = s ? `UPPER('${s}')` : 'USER';
-      return `SELECT table_name, column_name, column_id AS ordinal_position FROM all_tab_columns `
+      return `SELECT table_name, column_name, data_type, column_id AS ordinal_position FROM all_tab_columns `
         + `WHERE owner = ${owner} ORDER BY table_name, column_id FETCH FIRST ${MAX_DISCOVERED_COLUMNS} ROWS ONLY`;
     }
   }
@@ -155,7 +161,12 @@ export function groupAssets(tableRows: SourceRow[], columnRows: SourceRow[]): Di
     const column = pickField(r, 'column_name');
     if (!table || !column) continue;
     const asset = assets.get(table);
-    if (asset) asset.columns.push(column);
+    if (!asset) continue;
+    asset.columns.push(column);
+    const dataType = pickField(r, 'data_type');
+    if (dataType) {
+      (asset.columnTypes ??= {})[column] = dataType;
+    }
   }
   return [...assets.values()];
 }

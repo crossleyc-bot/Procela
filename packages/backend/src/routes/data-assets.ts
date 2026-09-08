@@ -1647,17 +1647,18 @@ router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
   // report path carries. Best-effort: if it fails (or returns nothing for a
   // source), we still apply the user's decisions, just without the drift /
   // row-count health enrichment for that asset.
-  const scanByName = new Map<string, { rowCount: number | null; columns: string[] }>();
+  const scanByName = new Map<string, { rowCount: number | null; columns: string[]; columnTypes: Record<string, string> }>();
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { discoverAssets } = require('../services/connector.service');
     const disc = await discoverAssets(conn);
     if (disc?.success) {
-      for (const a of (disc.details?.assets || []) as Array<{ name?: string; columns?: string[]; rowCount?: number | null }>) {
+      for (const a of (disc.details?.assets || []) as Array<{ name?: string; columns?: string[]; rowCount?: number | null; columnTypes?: Record<string, string> }>) {
         const nm = String(a?.name || '');
         if (nm) scanByName.set(nm.toLowerCase(), {
           rowCount: typeof a?.rowCount === 'number' ? a.rowCount : null,
           columns: Array.isArray(a?.columns) ? a.columns.map(String) : [],
+          columnTypes: a?.columnTypes && typeof a.columnTypes === 'object' ? a.columnTypes : {},
         });
       }
     }
@@ -1677,7 +1678,7 @@ router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
     const res = computeRescanHealth({
       previousFingerprint: asset.schemaFingerprint ?? null,
       previousRowCount: typeof asset.rowCount === 'number' ? asset.rowCount : null,
-      columns: scan.columns.map((c) => ({ name: c })),
+      columns: scan.columns.map((c) => ({ name: c, dataType: scan.columnTypes[c] })),
       rowCount: scan.rowCount,
     });
     if (scan.rowCount !== null) asset.rowCount = scan.rowCount;
@@ -1714,7 +1715,7 @@ router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
         // and seeds the liveness health from this scan's row count.
         const scan = scanByName.get(sourceAsset.toLowerCase());
         const res = scan
-          ? computeRescanHealth({ columns: scan.columns.map((c) => ({ name: c })), rowCount: scan.rowCount })
+          ? computeRescanHealth({ columns: scan.columns.map((c) => ({ name: c, dataType: scan.columnTypes[c] })), rowCount: scan.rowCount })
           : null;
         const asset: StoredDataAsset = {
           id: uuid(), orgId: conn.orgId, name, description: '',

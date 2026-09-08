@@ -36,7 +36,7 @@ export interface ConnectorResult {
   details?: {
     version?: string;
     tableCount?: number;
-    assets?: Array<{ name: string; type: string; rowCount?: number; lastModified?: string; columns?: string[] }>;
+    assets?: Array<{ name: string; type: string; rowCount?: number; lastModified?: string; columns?: string[]; columnTypes?: Record<string, string> }>;
   };
 }
 
