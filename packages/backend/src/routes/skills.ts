@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { filterByOrgScope, isOwnershipLevel, getVisibleOrgScope, OWNERSHIP_LEVELS } from '../lib/org-scope';
+import { isOwnershipLevel, getVisibleOrgScope, OWNERSHIP_LEVELS } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import logger from '../lib/logger';
 import { getSkillsRepository } from '../db/skills.repo';
 import {
@@ -95,8 +96,7 @@ const SEED_SKILLS: Array<{ name: string; category: SkillCategory; description: s
  *  skills rolling down and team-level skills rolling up, matching the
  *  visibility pattern for data assets, systems, and process nodes. */
 router.get('/', async (req: Request, res: Response) => {
-  const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : undefined;
-  const filtered = filterByOrgScope(await skillsRepo.list(), orgId);
+  const filtered = scopeListForRequest(req, await skillsRepo.list());
   res.json({
     success: true,
     data: filtered,
@@ -108,6 +108,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const skill = await skillsRepo.get(String(req.params.id));
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
+  if (!assertOrgAccess(req, res, skill.orgId, 'Skill not found')) return;
   res.json({ success: true, data: skill });
 });
 
@@ -191,6 +192,7 @@ router.post('/seed', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const skill = await skillsRepo.get(String(req.params.id));
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
+  if (!assertOrgAccess(req, res, skill.orgId, 'Skill not found')) return;
   const { name, category, description } = req.body;
   if (name !== undefined) {
     if (typeof name !== 'string' || !name.trim()) {
@@ -234,6 +236,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await skillsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
+  if (!assertOrgAccess(req, res, removed.orgId, 'Skill not found')) return;
   await skillsRepo.delete(removed.id);
 
   // Cascade off people, agents, and process nodes. Lazy requires break

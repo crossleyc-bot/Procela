@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, registerStore } from '../lib/persistence';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { hasDatabase } from '../db/prisma';
 import { people } from './people';
 import logger from '../lib/logger';
@@ -98,9 +99,9 @@ const router = Router();
 
 /** GET /api/v1/governance-policies — list policies / charters / frameworks / standards */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, status, category, documentType } = req.query;
+  const { status, category, documentType } = req.query;
   let filtered = await governancePoliciesRepo.list();
-  if (orgId) filtered = filtered.filter((p) => p.orgId === orgId);
+  filtered = scopeListForRequest(req, filtered);
   if (status) filtered = filtered.filter((p) => p.status === status);
   if (category) filtered = filtered.filter((p) => p.category === category);
   if (documentType) filtered = filtered.filter((p) => p.documentType === documentType);
@@ -116,9 +117,8 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-policies/summary — aggregate counts */
 router.get('/summary', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
   let filtered = await governancePoliciesRepo.list();
-  if (orgId) filtered = filtered.filter((p) => p.orgId === orgId);
+  filtered = scopeListForRequest(req, filtered);
 
   const byStatus: Record<string, number> = {};
   const byCategory: Record<string, number> = {};
@@ -140,6 +140,7 @@ router.get('/summary', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const policy = await governancePoliciesRepo.get(String(req.params.id));
   if (!policy) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
+  if (!assertOrgAccess(req, res, policy.orgId, 'Governance policy not found')) return;
 
   const [allPeople, allControls] = await Promise.all([peopleRepo().list(), controlsRepo().list()]);
   const linkedControlsCount = allControls.filter((c) => c.policyId === policy.id).length;
@@ -191,6 +192,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const policy = await governancePoliciesRepo.get(String(req.params.id));
   if (!policy) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
+  if (!assertOrgAccess(req, res, policy.orgId, 'Governance policy not found')) return;
 
   const before = { ...policy };
   const { name, description, status, ownerAssignmentId, category, reviewFrequency,
@@ -224,6 +226,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await governancePoliciesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
+  if (!assertOrgAccess(req, res, removed.orgId, 'Governance policy not found')) return;
 
   // Orphan controls linked to this policy (set policyId to empty string).
   try {

@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { requireAiEnabled } from '../middleware/ai-enabled';
-import { filterByOrgScope, getCachedOrgList } from '../lib/org-scope';
+import { getCachedOrgList } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
@@ -289,21 +290,19 @@ router.delete('/all', async (_req: Request, res: Response) => {
 
 /** GET /api/v1/data-domains — list all (support ?orgId= filter) */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
   const [allDomains, allPeople, allAssets] = await Promise.all([
     dataDomainsRepo.list(),
     peopleRepo().list(),
     dataAssetsRepo().list(),
   ]);
-  const filtered = filterByOrgScope(allDomains, orgId as string | undefined);
+  const filtered = scopeListForRequest(req, allDomains);
   const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets, allDomains));
   res.json({ success: true, data: enriched });
 });
 
 /** GET /api/v1/data-domains/summary — coverage stats */
 router.get('/summary', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = filterByOrgScope(await dataDomainsRepo.list(), orgId as string | undefined);
+  const filtered = scopeListForRequest(req, await dataDomainsRepo.list());
 
   const total = filtered.length;
   const governed = filtered.filter((d) => d.ownerId).length;
@@ -325,6 +324,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     dataDomainsRepo.list(),
   ]);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  if (!assertOrgAccess(req, res, domain.orgId, 'Data domain not found')) return;
   res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains) });
 });
 
@@ -439,6 +439,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const domain = await dataDomainsRepo.get(String(req.params.id));
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  if (!assertOrgAccess(req, res, domain.orgId, 'Data domain not found')) return;
 
   const { name, description, ownerId, stewardIds, dataAssetIds, status, scopeDefinition } = req.body;
 
@@ -534,6 +535,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.get('/:id/impact', async (req: Request, res: Response) => {
   const domain = await dataDomainsRepo.get(String(req.params.id));
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  if (!assertOrgAccess(req, res, domain.orgId, 'Data domain not found')) return;
 
   // Sub-domains are re-homed to top-level on delete (not deleted). Surface the
   // names so the confirm dialog can warn the user before they lose the nesting.
@@ -556,6 +558,7 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await dataDomainsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  if (!assertOrgAccess(req, res, removed.orgId, 'Data domain not found')) return;
   // Re-home any sub-domains to top-level before deleting the parent so they
   // aren't orphaned onto a dangling id. In Postgres the FK's onDelete:SetNull
   // handles this, but the JSON store has no cascade — do it explicitly so both

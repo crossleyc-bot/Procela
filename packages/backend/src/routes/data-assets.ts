@@ -3,7 +3,8 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { hasDatabase } from '../db/prisma';
-import { filterByOrgScope, isOwnershipLevel, getCachedOrgList } from '../lib/org-scope';
+import { isOwnershipLevel, getCachedOrgList } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { REGULATORY_SENSITIVITY_TAGS } from '../services/ai.service';
 import { auditService } from '../services/audit.service';
 import { aiService, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
@@ -651,15 +652,14 @@ router.delete('/all', async (_req: Request, res: Response) => {
  *  list. Each row is enriched with system name + suggested tier so
  *  the UI doesn't need a second round-trip. */
 router.get('/orphans', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
   const [allAssets, allSystems, allMappings, allPeople] = await Promise.all([
     dataAssetsRepo.list(),
     systemsRepo().list(),
     mappingsRepo().list(),
     peopleRepo().list(),
   ]);
-  const filtered = filterByOrgScope(allAssets, orgId as string | undefined);
-  const filteredSystems = filterByOrgScope(allSystems, orgId as string | undefined);
+  const filtered = scopeListForRequest(req, allAssets);
+  const filteredSystems = scopeListForRequest(req, allSystems);
   const peopleById = new Map(allPeople.map((p) => [p.id, p]));
   const mappedAssetIds = new Set<string>();
   for (const m of allMappings) if (m.dataAssetId) mappedAssetIds.add(m.dataAssetId);
@@ -687,7 +687,6 @@ router.get('/orphans', async (req: Request, res: Response) => {
 
 /** GET /api/v1/data-assets */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
   const [allAssets, allSystems, allMappings, allDomains, allPeople, allBindings, allRules] = await Promise.all([
     dataAssetsRepo.list(),
     systemsRepo().list(),
@@ -699,8 +698,8 @@ router.get('/', async (req: Request, res: Response) => {
     // coverage summary is correct in DB mode, not just JSON mode.
     getDataQualityRulesRepository(require('./data-quality').dataQualityRules).list(),
   ]);
-  const filtered = filterByOrgScope(allAssets, orgId as string | undefined);
-  const filteredSystems = filterByOrgScope(allSystems, orgId as string | undefined);
+  const filtered = scopeListForRequest(req, allAssets);
+  const filteredSystems = scopeListForRequest(req, allSystems);
   const boundAssetIds = new Set(allBindings.map((b) => b.dataAssetId));
 
   // Per-asset DQ coverage counts for the "rules" filter on the list page:
@@ -824,6 +823,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id/360', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
 
   const [allSystems, allDomains, allMappings, allProcessNodes, allPeople] = await Promise.all([
     systemsRepo().list(),
@@ -917,6 +917,7 @@ router.get('/:id/360', async (req: Request, res: Response) => {
 router.get('/:id/bindings', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const bindings = (await dataAssetBindingsRepo.list()).filter((b) => b.dataAssetId === asset.id);
   res.json({ success: true, data: bindings });
 });
@@ -933,6 +934,7 @@ router.get('/:id/bindings', async (req: Request, res: Response) => {
 router.post('/:id/bindings', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
 
   const parsed = createBindingBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -1000,6 +1002,7 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
 router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const binding = await dataAssetBindingsRepo.get(String(req.params.bindingId));
   if (!binding || binding.dataAssetId !== asset.id) { res.status(404).json({ success: false, error: 'Binding not found' }); return; }
 
@@ -1054,6 +1057,7 @@ router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
 router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const removed = await dataAssetBindingsRepo.get(String(req.params.bindingId));
   if (!removed || removed.dataAssetId !== asset.id) { res.status(404).json({ success: false, error: 'Binding not found' }); return; }
   await dataAssetBindingsRepo.delete(removed.id);
@@ -1076,6 +1080,7 @@ router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) =>
 router.get('/:id', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const healthScore = await effectiveHealthForAsset(asset);
   res.json({ success: true, data: { ...asset, healthScore } });
 });
@@ -1151,6 +1156,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
 
   const parsed = updateDataAssetBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -1215,6 +1221,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await dataAssetsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, removed.orgId, 'Data asset not found')) return;
   await dataAssetsRepo.delete(removed.id);
   // Cascade: delete this asset's bindings so they don't linger.
   const ownBindings = (await dataAssetBindingsRepo.list()).filter((b) => b.dataAssetId === removed.id);
@@ -1283,6 +1290,7 @@ async function enrichColumnsWithDq(assetId: string, cols: StoredDataAssetColumn[
 router.get('/:id/columns', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const cols = (await dataAssetColumnsRepo.list()).filter((c) => c.dataAssetId === asset.id);
   res.json({ success: true, data: await enrichColumnsWithDq(asset.id, cols) });
 });
@@ -1291,6 +1299,7 @@ router.get('/:id/columns', async (req: Request, res: Response) => {
 router.post('/:id/columns', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const parsed = createColumnBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -1315,6 +1324,9 @@ router.post('/:id/columns', async (req: Request, res: Response) => {
 
 /** PUT /data-assets/:id/columns/:colId — update a column */
 router.put('/:id/columns/:colId', async (req: Request, res: Response) => {
+  const parentAsset = await dataAssetsRepo.get(String(req.params.id));
+  if (!parentAsset) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
+  if (!assertOrgAccess(req, res, parentAsset.orgId, 'Column not found')) return;
   const col = await dataAssetColumnsRepo.get(String(req.params.colId));
   if (!col || col.dataAssetId !== req.params.id) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
   const parsed = updateColumnBodySchema.safeParse(req.body);
@@ -1336,6 +1348,9 @@ router.put('/:id/columns/:colId', async (req: Request, res: Response) => {
 
 /** DELETE /data-assets/:id/columns/:colId — delete a column */
 router.delete('/:id/columns/:colId', async (req: Request, res: Response) => {
+  const parentAsset = await dataAssetsRepo.get(String(req.params.id));
+  if (!parentAsset) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
+  if (!assertOrgAccess(req, res, parentAsset.orgId, 'Column not found')) return;
   const col = await dataAssetColumnsRepo.get(String(req.params.colId));
   if (!col || col.dataAssetId !== req.params.id) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
   await dataAssetColumnsRepo.delete(col.id);
@@ -1353,6 +1368,7 @@ router.delete('/:id/columns/:colId', async (req: Request, res: Response) => {
 router.post('/:id/columns/auto-discover', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const binding = await getPrimaryBinding(asset.id);
   if (!binding) {
     res.status(400).json({ success: false, error: 'Asset has no connection binding. Link it to a connection first.' });
@@ -1471,6 +1487,7 @@ function similarity(a: string, b: string): number {
 router.get('/:id/suggest-source', requireAiEnabled, async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { connections } = require('./connections') as typeof import('./connections');
@@ -1796,6 +1813,7 @@ router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
 router.get('/:id/impact', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
 
   const [allProcessNodes, allMappings, allPeople, allDomains] = await Promise.all([
     processNodesRepo().list(),
@@ -1952,6 +1970,7 @@ function filterTagsByRegime<T extends string>(tags: readonly T[], orgId: string 
 router.post('/:id/suggest-sensitivity', requireAiEnabled, async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const [allColumns, allSystems] = await Promise.all([
     dataAssetColumnsRepo.list(),
     systemsRepo().list(),
@@ -1985,6 +2004,7 @@ router.post('/:id/suggest-sensitivity', requireAiEnabled, async (req: Request, r
 router.put('/:id/sensitivity', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
   const parsed = putSensitivityBodySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ success: false, error: 'tags must be an array of sensitivity tag strings.' });
