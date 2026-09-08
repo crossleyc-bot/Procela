@@ -526,6 +526,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                           successMeasure; any legacy slaTarget was folded in by
                           the merge_sla_into_success_measure migration. */}
                       <DocField label="Target / SLA" value={node.successMeasure || ''} onSave={(v) => onUpdate(node.id, { successMeasure: v })} disabled={isLocked} placeholder="Measurable target / SLA, e.g. resolve within 4h P95, 99.9% monthly" />
+                      {/* Next review — forward-looking governance review date
+                          (distinct from the status-review timestamp). */}
+                      <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next governance review date, e.g. 2026-12-31" />
+                      {/* Risk mitigation — free-text notes complementing the
+                          Risk Level dropdown above. */}
+                      <DocField label="Risk mitigation" value={node.riskMitigation || ''} onSave={(v) => onUpdate(node.id, { riskMitigation: v })} disabled={isLocked} placeholder="How the risk is mitigated — controls, compensations…" />
                       <ControlsPicker
                         selected={node.controlIds || []}
                         options={controlsList}

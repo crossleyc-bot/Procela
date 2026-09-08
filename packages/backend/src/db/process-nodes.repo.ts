@@ -63,6 +63,8 @@ type PrismaProcessNodeRow = {
   slaTarget: string | null;
   trigger: string | null;
   volume: string | null;
+  nextReviewDate: string | null;
+  riskMitigation: string | null;
   domain: string;
   version: number;
   submittedBy: string | null;
@@ -141,6 +143,8 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
     ...(r.slaTarget ? { slaTarget: r.slaTarget } : {}),
     ...(r.trigger ? { trigger: r.trigger } : {}),
     ...(r.volume ? { volume: r.volume } : {}),
+    ...(r.nextReviewDate ? { nextReviewDate: r.nextReviewDate } : {}),
+    ...(r.riskMitigation ? { riskMitigation: r.riskMitigation } : {}),
     ...(r.controls && r.controls.length > 0
       ? { controlIds: r.controls.map((c) => c.controlId) }
       : {}),
@@ -190,6 +194,8 @@ function toPrismaData(row: Partial<StoredProcessNode>): Record<string, unknown> 
   if (row.slaTarget !== undefined) data.slaTarget = row.slaTarget ?? null;
   if (row.trigger !== undefined) data.trigger = row.trigger ?? null;
   if (row.volume !== undefined) data.volume = row.volume ?? null;
+  if (row.nextReviewDate !== undefined) data.nextReviewDate = row.nextReviewDate ?? null;
+  if (row.riskMitigation !== undefined) data.riskMitigation = row.riskMitigation ?? null;
   if (row.domain !== undefined) data.domain = row.domain;
   if (row.submittedBy !== undefined) data.submittedBy = row.submittedBy ?? null;
   if (row.submittedAt !== undefined) {

@@ -79,6 +79,10 @@ export interface ProcessNode {
   // EXTERNAL_REQUEST) and its processing volume / throughput (free-text).
   trigger?: string;
   volume?: string;
+  // Forward-looking governance review date (ISO date string) and free-text
+  // notes on how the activity's risk (riskLevel) is mitigated.
+  nextReviewDate?: string;
+  riskMitigation?: string;
   // Governance controls this activity implements or is subject to
   controlIds?: string[];
   // Change-management review workflow (only meaningful when the

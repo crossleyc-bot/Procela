@@ -68,6 +68,15 @@ test('buildColumnListSql: Postgres orders by ordinal + caps', () => {
   assert.match(sql, new RegExp(`LIMIT ${MAX_DISCOVERED_COLUMNS}`));
 });
 
+test('buildColumnListSql: every engine selects data_type (enables retype drift)', () => {
+  // information_schema engines expose it as data_type; Oracle's all_tab_columns
+  // uses the same column name, so a plain data_type match covers all four.
+  for (const engine of ['POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE'] as const) {
+    assert.match(buildColumnListSql(engine, 'public'), /data_type/, `${engine} must select data_type`);
+  }
+  assert.match(buildColumnListSql('ORACLE', 'HR'), /all_tab_columns/);
+});
+
 test('buildColumnListSql: a hostile schema name is quote-escaped, not injected', () => {
   const sql = buildTableListSql('POSTGRESQL', "x'; DROP TABLE users; --");
   assert.match(sql, /table_schema = 'x''; DROP TABLE users; --'/);
@@ -98,6 +107,28 @@ test('groupAssets: groups columns under their table, tags view vs table', () => 
   const view = assets.find((a) => a.name === 'customer_v')!;
   assert.equal(view.type, 'VIEW');
   assert.deepEqual(view.columns, ['full_name']);
+});
+
+test('groupAssets: captures column data types when the catalog reports them', () => {
+  const tableRows = [{ table_name: 'customers', table_type: 'BASE TABLE' }];
+  const columnRows = [
+    { table_name: 'customers', column_name: 'id', data_type: 'integer', ordinal_position: '1' },
+    { table_name: 'customers', column_name: 'email', data_type: 'text', ordinal_position: '2' },
+    // A row without a data_type (older scan) still contributes the column name.
+    { table_name: 'customers', column_name: 'legacy', ordinal_position: '3' },
+  ] as any;
+  const assets = groupAssets(tableRows, columnRows);
+  const customers = assets.find((a) => a.name === 'customers')!;
+  assert.deepEqual(customers.columns, ['id', 'email', 'legacy']);
+  assert.deepEqual(customers.columnTypes, { id: 'integer', email: 'text' });
+});
+
+test('groupAssets: no data_type at all leaves columnTypes undefined (names-only scan)', () => {
+  const assets = groupAssets(
+    [{ table_name: 'orders', table_type: 'BASE TABLE' }],
+    [{ table_name: 'orders', column_name: 'id', ordinal_position: '1' }],
+  );
+  assert.equal(assets[0].columnTypes, undefined);
 });
 
 test('groupAssets: handles Oracle upper-cased keys', () => {
