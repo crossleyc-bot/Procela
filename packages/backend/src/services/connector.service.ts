@@ -20,6 +20,7 @@ import { analyzeLocalFile } from '../lib/local-file-connector';
 import { SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
+import { decryptCredentials } from './connection-secrets';
 import logger from '../lib/logger';
 
 export interface ConnectorResult {
@@ -273,6 +274,9 @@ async function testSpreadsheet(profile: ConnectionProfileLike): Promise<Connecto
 }
 
 export async function testConnection(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  // Decrypt at-rest secrets just-in-time so the driver authenticates with the
+  // real value (no-op for plaintext / when encryption isn't configured).
+  profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
   switch (profile.connectionType) {
     case 'FILE_STORAGE':
       if (profile.config.storageType === 'LOCAL') return testLocalFile(profile);
@@ -302,6 +306,8 @@ function toDbSourceRequest(profile: ConnectionProfileLike): DbSourceRequest | nu
 }
 
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  // Decrypt at-rest secrets just-in-time before the driver authenticates.
+  profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
   // Real discovery for LOCAL file uploads: surface the file as a single
   // asset with its parsed columns attached.
   if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'LOCAL') {

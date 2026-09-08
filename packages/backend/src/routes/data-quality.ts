@@ -14,6 +14,7 @@ import { dataAssets, dataAssetBindings, dataAssetColumns, StoredDataAsset, Store
 import { connections, ConnectionProfile } from './connections';
 import { syncDataQualityIssueForRule } from './governance-issues';
 import { measureRuleOverDb } from '../services/dq-db';
+import { decryptCredentials } from '../services/connection-secrets';
 import {
   evaluateRule,
   rollupAssetHealth,
@@ -603,14 +604,16 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
   if (conn?.connectionType === 'DATABASE') {
     try {
       const cfg = conn.config as Record<string, unknown>;
+      // Decrypt at-rest credentials before the live driver authenticates.
+      const creds = await decryptCredentials(conn.credentials);
       result = await measureRuleOverDb(rule.ruleType!, rule.parameters || {}, {
         dbType: cfg?.dbType as string | undefined,
         host: cfg?.host as string | undefined,
         port: cfg?.port != null ? Number(cfg.port) : undefined,
         database: cfg?.database as string | undefined,
         schema: cfg?.schema as string | undefined,
-        username: conn.credentials?.username,
-        password: conn.credentials?.password,
+        username: creds?.username,
+        password: creds?.password,
         table: binding?.sourceAsset || asset.name,
         column: sourceColumn,
       });
