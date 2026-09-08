@@ -56,10 +56,14 @@ remaining item is proving it end to end against a real customer database.*
   column-set fingerprint on `DataAsset` is compared each scan — a changed
   column set penalizes the health score and raises an auto-resolving
   `SCHEMA_DRIFT` governance issue) and a **graded row-count-delta** (a shrink
-  scored by magnitude). Both are wired on the connector report ingest.
-  Remaining: extend the two signals to the cloud-reachable direct-connect
-  discover/reconcile path, which does not yet collect row counts during
-  introspection.
+  scored by magnitude). Both signals now cover **both scan paths**: the
+  connector report ingest, and the cloud-reachable **direct-connect
+  discover/reconcile** flow — introspection reads approximate row counts from
+  engine catalog statistics, and reconciling a source refreshes the asset's
+  fingerprint + liveness health and raises the same `SCHEMA_DRIFT` issue on a
+  changed column set. (Direct-connect fingerprints are column-name-based;
+  introspection doesn't fetch column types, so a pure retype isn't flagged
+  there.)
 
 ## Track B — production-scale hardening
 

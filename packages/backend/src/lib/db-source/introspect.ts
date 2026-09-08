@@ -20,6 +20,11 @@ export interface DiscoveredAsset {
   name: string;
   type: 'TABLE' | 'VIEW';
   columns: string[];
+  /** Approximate row count from engine catalog statistics (not a live
+   *  COUNT(*)) — mirrors the connector's rowCount signal. Undefined when the
+   *  engine didn't report one (a view, un-analyzed table, or a stats view the
+   *  connecting user can't read). */
+  rowCount?: number;
 }
 
 /** Default catalog scope per engine when the connection didn't set a schema.
@@ -90,6 +95,39 @@ export function buildColumnListSql(dbType: DbSourceType, schema: string): string
   }
 }
 
+/**
+ * Build the per-table row-count query for a schema. Returns rows of
+ * (table_name, row_count) from the engine's catalog statistics — approximate,
+ * not a live COUNT(*), so it stays cheap on large schemas (the same contract
+ * as the connector's reported rowCount). Views and un-analyzed tables simply
+ * don't appear or report null, which the caller maps to "unknown".
+ */
+export function buildRowCountSql(dbType: DbSourceType, schema: string): string {
+  const s = escapeLiteral(schema);
+  switch (dbType) {
+    case 'POSTGRESQL':
+      // reltuples is the planner's estimate; -1 (PG14+, never analyzed) maps
+      // to unknown in applyRowCounts. relkind r/p = ordinary/partitioned table.
+      return `SELECT c.relname AS table_name, c.reltuples AS row_count `
+        + `FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace `
+        + `WHERE n.nspname = '${s}' AND c.relkind IN ('r', 'p')`;
+    case 'MYSQL':
+      // information_schema.tables.table_rows is approximate for InnoDB.
+      return `SELECT table_name, table_rows AS row_count FROM information_schema.tables `
+        + `WHERE table_schema = '${s}' AND table_type = 'BASE TABLE'`;
+    case 'SQLSERVER':
+      // Heap (index_id 0) or clustered (1) partition row counts, summed.
+      return `SELECT t.name AS table_name, SUM(p.rows) AS row_count `
+        + `FROM sys.tables t JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1) `
+        + `WHERE SCHEMA_NAME(t.schema_id) = '${s}' GROUP BY t.name`;
+    case 'ORACLE': {
+      // num_rows comes from the optimizer stats; null until the table is analyzed.
+      const owner = s ? `UPPER('${s}')` : 'USER';
+      return `SELECT table_name, num_rows AS row_count FROM all_tables WHERE owner = ${owner}`;
+    }
+  }
+}
+
 /** Read a field from a normalized row case-insensitively — Postgres lower-cases
  *  unquoted aliases while Oracle upper-cases them. */
 export function pickField(row: SourceRow, key: string): string {
@@ -123,6 +161,25 @@ export function groupAssets(tableRows: SourceRow[], columnRows: SourceRow[]): Di
 }
 
 /**
+ * Merge catalog row-count rows into the discovered assets by table name.
+ * Pure — the driver runs the query, this attaches the numbers. A missing,
+ * empty, non-numeric, or negative value (e.g. Postgres reltuples -1 = never
+ * analyzed) maps to null ("unknown"), so it's never mistaken for a real 0.
+ */
+export function applyRowCounts(assets: DiscoveredAsset[], rowCountRows: SourceRow[]): void {
+  const byName = new Map(assets.map((a) => [a.name, a]));
+  for (const r of rowCountRows) {
+    const name = pickField(r, 'table_name');
+    if (!name) continue;
+    const asset = byName.get(name);
+    if (!asset) continue;
+    const raw = (r as Record<string, unknown>).row_count ?? (r as Record<string, unknown>).ROW_COUNT;
+    const n = raw === undefined || raw === null || raw === '' ? NaN : Number(raw);
+    asset.rowCount = Number.isFinite(n) && n >= 0 ? Math.trunc(n) : undefined;
+  }
+}
+
+/**
  * Run real schema introspection against a live database and return the
  * discovered assets. Throws on connection / auth / query failure so the caller
  * can surface a real error (fail-loud — never a silent fallback to samples).
@@ -131,5 +188,14 @@ export async function discoverDbSchema(req: DbSourceRequest): Promise<Discovered
   const schema = (req.schema && req.schema.trim()) || defaultSchema(req.dbType, req.database);
   const tableRows = await fetchDbRows({ ...req, table: undefined, query: buildTableListSql(req.dbType, schema) });
   const columnRows = await fetchDbRows({ ...req, table: undefined, query: buildColumnListSql(req.dbType, schema) });
-  return groupAssets(tableRows, columnRows);
+  const assets = groupAssets(tableRows, columnRows);
+  // Row counts are a best-effort enrichment: the stats views can be
+  // permission-gated (e.g. a read-only user without access to pg_class /
+  // sys.partitions), so a failure here must not fail discovery — the assets
+  // just carry no rowCount, exactly as an older scan would.
+  try {
+    const rowCountRows = await fetchDbRows({ ...req, table: undefined, query: buildRowCountSql(req.dbType, schema) });
+    applyRowCounts(assets, rowCountRows);
+  } catch { /* leave rowCount undefined on every asset */ }
+  return assets;
 }

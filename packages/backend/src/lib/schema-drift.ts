@@ -14,6 +14,7 @@
 // Pure and deterministic so it is unit-testable.
 
 import { createHash } from 'crypto';
+import { computeDiscoveredAssetHealth } from './asset-health';
 
 export interface FingerprintColumn {
   name?: string | null;
@@ -58,4 +59,46 @@ export function hasSchemaDrifted(
 ): boolean {
   if (!previousFingerprint || !nextFingerprint) return false;
   return previousFingerprint !== nextFingerprint;
+}
+
+export interface RescanHealthInput {
+  /** Fingerprint stored on the asset from the previous scan, if any. */
+  previousFingerprint?: string | null;
+  /** Row count recorded on the asset from the previous scan, if any. */
+  previousRowCount?: number | null;
+  /** Column set reported by this scan (names, optionally with dataType). */
+  columns: FingerprintColumn[] | null | undefined;
+  /** Row count reported by this scan, if the source provided one. */
+  rowCount?: number | null;
+}
+
+export interface RescanHealthResult {
+  /** Fingerprint of this scan's column set — persist as the new baseline. */
+  schemaFingerprint: string | null;
+  /** True when the column set drifted from the stored baseline. */
+  drifted: boolean;
+  /** The freshness/liveness health score after the drift + row-count signals. */
+  healthScore: number;
+}
+
+/**
+ * Compose the drift verdict, the new fingerprint baseline, and the health
+ * score for a discovered asset that was (re-)scanned. This is the shared
+ * kernel behind both scan paths' "recompute health from this scan" step: the
+ * connector report ingest does it inline; the direct-connect discover/reconcile
+ * flow calls this. Freshness is left neutral here — direct-connect introspection
+ * has no per-table write time — so the score is driven by the row-count delta
+ * and the schema-drift penalty.
+ */
+export function computeRescanHealth(input: RescanHealthInput): RescanHealthResult {
+  const schemaFingerprint = computeSchemaFingerprint(input.columns);
+  const drifted = hasSchemaDrifted(input.previousFingerprint, schemaFingerprint);
+  const prevRow = typeof input.previousRowCount === 'number' ? input.previousRowCount : null;
+  const rowCount = typeof input.rowCount === 'number' ? input.rowCount : prevRow;
+  const healthScore = computeDiscoveredAssetHealth({
+    rowCount,
+    previousRowCount: prevRow,
+    schemaDrift: drifted,
+  });
+  return { schemaFingerprint, drifted, healthScore };
 }

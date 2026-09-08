@@ -95,7 +95,9 @@ direct Connection also writes — into the same columns:
 | What arrives | Table · columns | Option 1 (Connection) | Option 2 (connector) |
 |---|---|---|---|
 | Table exists (name, owning system) | `data_assets` · `name`, `description`, `systemId` | ✅ creates/updates | ✅ creates as `BRONZE` if new |
-| Freshness (row count, last-synced, health) | `data_assets` · `healthScore`, `healthScoreAt`, `lastSyncedByConnectorId`, `lastSyncedAt` | ✅ | ✅ |
+| Freshness (row count, last-synced, health) | `data_assets` · `healthScore`, `healthScoreAt`, `rowCount`, `lastSyncedByConnectorId`, `lastSyncedAt` | ✅ | ✅ |
+| Schema-drift baseline (column-set fingerprint) | `data_assets` · `schemaFingerprint` | ✅ set on reconcile | ✅ set on report |
+| Change-over-time signals (schema drift → `SCHEMA_DRIFT` issue; graded row-count shrink) → liveness health | derived each scan from `schemaFingerprint` + `rowCount` | ✅ direct-connect reconcile | ✅ connector report |
 | Column names & types | `data_asset_columns` · `columnName`, `dataType`, `sourceAsset`, `sourceColumn` | ✅ live introspection | ✅ from the report |
 | Live column introspection on demand (Test / Discover) | — | ✅ | ❌ metadata push only |
 | Data-quality rule execution | `DataQualityRule` results | ⚠️ simulated today | ✅ 5 pushdown types measured on-prem; REGEX_MATCH/CUSTOM simulate |

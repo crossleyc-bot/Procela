@@ -8,12 +8,15 @@ import assert from 'node:assert/strict';
 import {
   buildTableListSql,
   buildColumnListSql,
+  buildRowCountSql,
+  applyRowCounts,
   groupAssets,
   pickField,
   escapeLiteral,
   defaultSchema,
   MAX_DISCOVERED_TABLES,
   MAX_DISCOVERED_COLUMNS,
+  type DiscoveredAsset,
 } from '../lib/db-source/introspect';
 
 test('defaultSchema: per-engine catalog scope', () => {
@@ -105,4 +108,52 @@ test('groupAssets: handles Oracle upper-cased keys', () => {
   assert.equal(assets.length, 1);
   assert.equal(assets[0].name, 'EMPLOYEES');
   assert.deepEqual(assets[0].columns, ['EMP_ID']);
+});
+
+test('buildRowCountSql: per-engine catalog-stats sources, schema-scoped', () => {
+  const pg = buildRowCountSql('POSTGRESQL', 'public');
+  assert.match(pg, /pg_class/); assert.match(pg, /reltuples/); assert.match(pg, /nspname = 'public'/);
+  const my = buildRowCountSql('MYSQL', 'app');
+  assert.match(my, /information_schema\.tables/); assert.match(my, /table_rows/); assert.match(my, /table_schema = 'app'/);
+  const ss = buildRowCountSql('SQLSERVER', 'dbo');
+  assert.match(ss, /sys\.partitions/); assert.match(ss, /SUM\(p\.rows\)/); assert.match(ss, /SCHEMA_NAME\(t\.schema_id\) = 'dbo'/);
+  const or = buildRowCountSql('ORACLE', 'HR');
+  assert.match(or, /all_tables/); assert.match(or, /num_rows/); assert.match(or, /owner = UPPER\('HR'\)/);
+  // No schema → Oracle scopes to the connecting user.
+  assert.match(buildRowCountSql('ORACLE', ''), /owner = USER/);
+});
+
+test('buildRowCountSql: a hostile schema name is quote-escaped, not injected', () => {
+  const sql = buildRowCountSql('POSTGRESQL', "x'; DROP TABLE users; --");
+  assert.ok(sql.includes("'x''; DROP TABLE users; --'"));
+});
+
+test('applyRowCounts: merges by table name; unknown/negative/missing → undefined', () => {
+  const assets: DiscoveredAsset[] = [
+    { name: 'customers', type: 'TABLE', columns: ['id'] },
+    { name: 'orders', type: 'TABLE', columns: ['id'] },
+    { name: 'empty_t', type: 'TABLE', columns: ['id'] },
+    { name: 'never_analyzed', type: 'TABLE', columns: ['id'] },
+    { name: 'a_view', type: 'VIEW', columns: ['id'] },
+  ];
+  applyRowCounts(assets, ([
+    { table_name: 'customers', row_count: 1200 },
+    { table_name: 'orders', row_count: '42' },      // string from the driver
+    { table_name: 'empty_t', row_count: 0 },        // a real zero survives
+    { table_name: 'never_analyzed', row_count: -1 },// PG reltuples "unknown"
+    // a_view: no row — stays undefined
+    { table_name: 'ghost', row_count: 99 },         // no matching asset — ignored
+  ] as any));
+  const by = (n: string) => assets.find((a) => a.name === n)!;
+  assert.equal(by('customers').rowCount, 1200);
+  assert.equal(by('orders').rowCount, 42);
+  assert.equal(by('empty_t').rowCount, 0);
+  assert.equal(by('never_analyzed').rowCount, undefined);
+  assert.equal(by('a_view').rowCount, undefined);
+});
+
+test('applyRowCounts: Oracle upper-cased keys', () => {
+  const assets: DiscoveredAsset[] = [{ name: 'EMPLOYEES', type: 'TABLE', columns: ['ID'] }];
+  applyRowCounts(assets, [{ TABLE_NAME: 'EMPLOYEES', ROW_COUNT: 500 }] as any);
+  assert.equal(assets[0].rowCount, 500);
 });

@@ -15,6 +15,8 @@ const dataAssetsRouter = require('../routes/data-assets').default;
 const { dataAssets, dataAssetBindings } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { connections } = require('../routes/connections');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceIssues } = require('../routes/governance-issues');
 
 const P = 'test-recon-';
 const ORG = P + 'org';
@@ -41,6 +43,7 @@ const clean = () => {
   sweep(dataAssets, (a) => a.orgId === ORG);
   sweep(dataAssetBindings, (b) => b.orgId === ORG);
   sweep(connections, (c) => c.id === CONN);
+  sweep(governanceIssues, (i) => i.orgId === ORG);
 };
 
 describe('discovery reconciliation (suggest + confirm)', () => {
@@ -111,6 +114,20 @@ describe('discovery reconciliation (suggest + confirm)', () => {
     const created = dataAssets.find((a: any) => a.orgId === ORG && a.sourceAsset === 'orders' && a.origin === 'DISCOVERED');
     assert.ok(created, 'orders should create a new asset');
     assert.strictEqual(created.governanceTier, 'BRONZE');
+    // Direct-connect drift/row-count enrichment: the scan's row count and a
+    // schema fingerprint baseline are captured, and a liveness health score is
+    // seeded (no longer a flat 0).
+    assert.strictEqual(created.rowCount, 128450);
+    assert.ok(created.schemaFingerprint, 'created asset gets a fingerprint baseline');
+    assert.notStrictEqual(created.healthScore, 0);
+
+    // The linked existing asset is refreshed the same way.
+    const linkedCust = dataAssets.find((a: any) => a.id === P + 'asset-cust');
+    assert.strictEqual(linkedCust.rowCount, 45230);
+    assert.ok(linkedCust.schemaFingerprint, 'linked asset gets a fingerprint baseline');
+
+    // First reconcile establishes baselines → no schema-drift issue raised.
+    assert.strictEqual(governanceIssues.filter((i: any) => i.orgId === ORG && i.issueType === 'SCHEMA_DRIFT').length, 0);
 
     // Re-scan: both bound tables now read as linked.
     const res = await request(port, 'GET', `/data-assets/reconcile/${CONN}`);
