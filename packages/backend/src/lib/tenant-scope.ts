@@ -90,3 +90,22 @@ export function assertOrgAccess(
   res.status(404).json({ success: false, error: notFoundMessage });
   return false;
 }
+
+/**
+ * Multi-org variant of assertOrgAccess for records visible through ANY of
+ * several orgs (e.g. a ProcessNode with an `orgIds[]` array plus a primary
+ * `orgId`). Passes when the caller can access at least one of them, or is
+ * unrestricted. Responds 404 and returns false otherwise.
+ */
+export function assertOrgAccessAny(
+  req: AuthenticatedRequest,
+  res: Response,
+  orgIds: Array<string | null | undefined>,
+  notFoundMessage = 'Not found',
+): boolean {
+  const visible = visibleOrgIds(req);
+  if (visible === null) return true; // unrestricted
+  if (orgIds.some((id) => id != null && visible.has(id))) return true;
+  res.status(404).json({ success: false, error: notFoundMessage });
+  return false;
+}

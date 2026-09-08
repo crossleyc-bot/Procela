@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { people } from './people';
 import logger from '../lib/logger';
 import { getSopsRepository } from '../db/sops.repo';
@@ -218,9 +218,9 @@ const router = Router();
 
 /** GET /api/v1/sops — list with filters */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, category, role, status } = req.query;
+  const { category, role, status } = req.query;
   const [allSops, allPeople] = await Promise.all([sopsRepo.list(), peopleRepo().list()]);
-  let filtered = filterByOrgScope(allSops, orgId as string | undefined);
+  let filtered = scopeListForRequest(req, allSops);
 
   if (category) filtered = filtered.filter((s) => s.category === category);
   if (status) filtered = filtered.filter((s) => s.status === status);
@@ -237,6 +237,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const [sop, allPeople] = await Promise.all([sopsRepo.get(String(req.params.id)), peopleRepo().list()]);
   if (!sop) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
+  if (!assertOrgAccess(req, res, sop.orgId, 'SOP not found')) return;
   res.json({ success: true, data: enrichSop(sop, allPeople) });
 });
 

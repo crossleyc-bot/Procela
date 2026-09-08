@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { startBackgroundSweep } from '../lib/background-timer';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
@@ -176,12 +176,11 @@ router.delete('/all', async (_req: Request, res: Response) => {
 
 /** GET /api/v1/data-quality — list all (support ?orgId= and ?dataAssetId= filters), enrich with asset name */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, dataAssetId } = req.query;
+  const { dataAssetId } = req.query;
   const [allRules, allAssets, allConns, allBindings] = await Promise.all([
     dataQualityRulesRepo.list(), dataAssetsRepo.list(), connectionsRepo.list(), dataAssetBindingsRepo.list(),
   ]);
-  let filtered = allRules;
-  if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
+  let filtered = scopeListForRequest(req, allRules);
   if (dataAssetId) filtered = filtered.filter((r) => r.dataAssetId === dataAssetId);
 
   const enriched = filtered.map((rule) => {
@@ -201,9 +200,8 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/data-quality/summary — overall quality stats */
 router.get('/summary', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
   const allRules = await dataQualityRulesRepo.list();
-  const filtered = filterByOrgScope(allRules, orgId as string | undefined);
+  const filtered = scopeListForRequest(req, allRules);
 
   const totalRules = filtered.length;
   const passingCount = filtered.filter((r) => r.status === 'PASSING').length;
@@ -397,6 +395,7 @@ router.post('/run-all/:assetId', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const rule = await dataQualityRulesRepo.get(String(req.params.id));
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
+  if (!assertOrgAccess(req, res, rule.orgId, 'Quality rule not found')) return;
   res.json({ success: true, data: rule });
 });
 

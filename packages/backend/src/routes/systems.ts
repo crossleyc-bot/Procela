@@ -618,7 +618,7 @@ router.post('/', async (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   await systemsRepo.create(sys);
-  auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'CREATE', null, sys);
+  auditService.log(sys.orgId, null, 'System', sys.id, 'CREATE', null, sys);
   res.status(201).json({ success: true, data: sys });
 });
 
@@ -682,7 +682,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     custodianIds: sys.custodianIds,
     updatedAt: sys.updatedAt,
   });
-  auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);
+  auditService.log(sys.orgId, null, 'System', sys.id, 'UPDATE', null, sys);
   res.json({ success: true, data: sys });
 });
 
@@ -709,7 +709,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await systemsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   if (!assertOrgAccess(req, res, removed.orgId, 'System not found')) return;
-  auditService.log(DEV_ORG_ID, null, 'System', removed.id, 'DELETE', removed, null);
+  auditService.log(removed.orgId, null, 'System', removed.id, 'DELETE', removed, null);
   await systemsRepo.delete(removed.id);
   // Cascade: remove every connection→system link that pointed at this
   // system. The connections themselves keep existing — they may still

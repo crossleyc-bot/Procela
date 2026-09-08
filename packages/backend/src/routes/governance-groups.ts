@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { dataDomains } from './data-domains';
 import { people } from './people';
 import { agents } from './agents';
@@ -192,8 +192,7 @@ router.delete('/all', async (_req: Request, res: Response) => {
 
 /** GET /api/v1/governance-groups */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  let filtered = filterByOrgScope(await governanceGroupsRepo.list(), orgId as string | undefined);
+  let filtered = scopeListForRequest(req, await governanceGroupsRepo.list());
   // Deduplicate by name+type within the result set
   const seen = new Set<string>();
   filtered = filtered.filter((g) => {
@@ -268,6 +267,7 @@ router.post('/generate-template', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const group = await governanceGroupsRepo.get(String(req.params.id));
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
+  if (!assertOrgAccess(req, res, group.orgId, 'Governance group not found')) return;
 
   const [allPeople, allAgents, allGroups] = await Promise.all([
     peopleRepo().list(), agentsRepo().list(), governanceGroupsRepo.list(),
@@ -300,6 +300,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.get('/:id/recommendations', async (req: Request, res: Response) => {
   const group = await governanceGroupsRepo.get(String(req.params.id));
   if (!group) { res.status(404).json({ success: false, error: 'Group not found' }); return; }
+  if (!assertOrgAccess(req, res, group.orgId, 'Group not found')) return;
 
   const validChildTypes = VALID_CHILDREN[group.type] || [];
   const orgGroups = (await governanceGroupsRepo.list()).filter((g) => g.orgId === group.orgId);

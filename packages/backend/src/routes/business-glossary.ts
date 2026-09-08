@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope, getCachedOrgList } from '../lib/org-scope';
+import { getCachedOrgList } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { parseCsv } from '../lib/csv';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
@@ -162,13 +163,13 @@ const router = Router();
 
 /** GET /api/v1/business-glossary — list with filters */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, status, category, domainId, search } = req.query;
+  const { status, category, domainId, search } = req.query;
   const [allTerms, allPeople, allDomains] = await Promise.all([
     glossaryTermsRepo.list(),
     peopleRepo().list(),
     dataDomainsRepo().list(),
   ]);
-  let filtered = filterByOrgScope(allTerms, orgId as string | undefined);
+  let filtered = scopeListForRequest(req, allTerms);
 
   if (status && typeof status === 'string') {
     filtered = filtered.filter((t) => t.status === status);
@@ -195,8 +196,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/business-glossary/summary — aggregate stats */
 router.get('/summary', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = filterByOrgScope(await glossaryTermsRepo.list(), orgId as string | undefined);
+  const filtered = scopeListForRequest(req, await glossaryTermsRepo.list());
 
   const total = filtered.length;
   const approved = filtered.filter((t) => t.status === 'APPROVED').length;
@@ -231,6 +231,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Glossary term not found' });
     return;
   }
+  if (!assertOrgAccess(req, res, term.orgId, 'Glossary term not found')) return;
   res.json({ success: true, data: enrichTerm(term, allPeople, allDomains) });
 });
 

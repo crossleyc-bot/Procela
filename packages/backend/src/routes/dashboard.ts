@@ -17,6 +17,7 @@ import { loadStore, registerStore } from '../lib/persistence';
 import { getRaciOverridesRepository } from '../db/raci-overrides.repo';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { OWNERSHIP_LEVELS, filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest } from '../lib/tenant-scope';
 // Dashboard is a read aggregator: every handler tallies data across many
 // stores. Each store is read through its repository so the endpoints read
 // Postgres in DB mode and the in-memory array in JSON mode (the factory
@@ -224,11 +225,11 @@ router.get('/stats', async (req: Request, res: Response) => {
   // filterByOrgScope walks both ancestors and descendants so a
   // division-scope dashboard includes company-level items rolled down
   // AND team-level items rolled up — matching the rest of the app.
-  const filteredNodes = filterByOrgScope(processNodes, oid).filter(nodeMatchesDomain);
-  const filteredAssets = filterByOrgScope(dataAssets, oid);
-  const filteredMappings = filterByOrgScope(mappings, oid);
-  const filteredSystems = filterByOrgScope(systems, oid);
-  const filteredPeople = filterByOrgScope(people, oid);
+  const filteredNodes = scopeListForRequest(req, processNodes).filter(nodeMatchesDomain);
+  const filteredAssets = scopeListForRequest(req, dataAssets);
+  const filteredMappings = scopeListForRequest(req, mappings);
+  const filteredSystems = scopeListForRequest(req, systems);
+  const filteredPeople = scopeListForRequest(req, people);
   // Flows don't carry orgId — walk them via the (already-scoped) node
   // set so scope + domain filtering fall out naturally.
   const inScopeNodeIds = new Set(filteredNodes.map((n) => n.id));
@@ -285,7 +286,7 @@ router.get('/stats', async (req: Request, res: Response) => {
   );
   const orphanAssets = filteredAssets.filter((a) => !mappedAssetIdsAll.has(a.id)).length;
 
-  const filteredDomains = filterByOrgScope(dataDomains, oid);
+  const filteredDomains = scopeListForRequest(req, dataDomains);
   const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
 
   // ── Descendant roll-up for the setup-complete banner ──
@@ -378,12 +379,12 @@ router.get('/raci', async (req: Request, res: Response) => {
   // Filter data by org. damaRoles keeps its bespoke filter — it uses
   // scopeType/scopeId rather than orgId/orgIds so filterByOrgScope
   // doesn't apply.
-  const filteredNodes = filterByOrgScope(processNodes, oid);
-  const filteredPeople = filterByOrgScope(people, oid);
+  const filteredNodes = scopeListForRequest(req, processNodes);
+  const filteredPeople = scopeListForRequest(req, people);
   const filteredRoles = oid
     ? damaRoles.filter((r) => r.scopeType === 'ORG' && r.scopeId === oid)
     : damaRoles;
-  const filteredGroups = filterByOrgScope(governanceGroups, oid);
+  const filteredGroups = scopeListForRequest(req, governanceGroups);
 
   // Rows: every planning-level node in the hierarchy. EXECUTION is a
   // run-time logging level (instances of a TASK), not something you
@@ -438,7 +439,7 @@ router.get('/raci', async (req: Request, res: Response) => {
   //   relevant domains, plus the Data Governance Lead and DQ Analysts.
 
   // Build lookup: processNodeId -> mapped data asset IDs
-  const filteredMappings = filterByOrgScope(mappings, oid);
+  const filteredMappings = scopeListForRequest(req, mappings);
   const assetsByNode: Record<string, string[]> = {};
   for (const m of filteredMappings) {
     if (!m.dataAssetId) continue; // policy / attachment rows aren't assets
@@ -1102,19 +1103,16 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
  * has been set up for the current org (processes, groups, domains).
  */
 router.get('/governance-status', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const oid = orgId as string | undefined;
-
   const [processNodes, governanceGroups, dataDomains] = await Promise.all([
     processNodesRepo.list(), governanceGroupsRepo.list(), dataDomainsRepo.list(),
   ]);
 
-  // Check each component. filterByOrgScope handles the "no orgId set →
+  // Check each component. scopeListForRequest handles the "no orgId set →
   // don't filter" case as well as the ancestor/descendant roll-up.
-  const hasGovProcesses = filterByOrgScope(processNodes, oid)
+  const hasGovProcesses = scopeListForRequest(req, processNodes)
     .some((n) => n.level === 'VALUE_STREAM' && isGovernanceProcess(n));
-  const hasGovGroups = filterByOrgScope(governanceGroups, oid).length > 0;
-  const hasDomains = filterByOrgScope(dataDomains, oid).length > 0;
+  const hasGovGroups = scopeListForRequest(req, governanceGroups).length > 0;
+  const hasDomains = scopeListForRequest(req, dataDomains).length > 0;
 
   res.json({
     success: true,

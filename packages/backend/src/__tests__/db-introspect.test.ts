@@ -82,6 +82,27 @@ test('buildColumnListSql: a hostile schema name is quote-escaped, not injected',
   assert.match(sql, /table_schema = 'x''; DROP TABLE users; --'/);
 });
 
+test('escapeLiteral: doubles single quotes for every engine', () => {
+  assert.equal(escapeLiteral("a'b"), "a''b");
+  assert.equal(escapeLiteral("a'b", 'POSTGRESQL'), "a''b");
+});
+
+test('escapeLiteral: doubles backslash only for MySQL (its literals treat it as an escape)', () => {
+  // MySQL: a trailing backslash would otherwise escape the closing quote.
+  assert.equal(escapeLiteral('a\\b', 'MYSQL'), 'a\\\\b');
+  // Postgres / SQL Server / Oracle keep backslash literal — doubling it would
+  // corrupt a legitimate schema name.
+  assert.equal(escapeLiteral('a\\b', 'POSTGRESQL'), 'a\\b');
+  assert.equal(escapeLiteral('a\\b', 'SQLSERVER'), 'a\\b');
+  assert.equal(escapeLiteral('a\\b'), 'a\\b');
+});
+
+test('buildTableListSql: MySQL escapes a backslash-laden schema name', () => {
+  // `x\' ...` — the backslash must be doubled so it can't escape the quote.
+  const sql = buildTableListSql('MYSQL', "x\\' OR '1'='1");
+  assert.match(sql, /table_schema = 'x\\\\'' OR ''1''=''1'/);
+});
+
 test('pickField: reads case-insensitively (PG lower, Oracle upper)', () => {
   assert.equal(pickField({ table_name: 'orders' }, 'table_name'), 'orders');
   assert.equal(pickField({ TABLE_NAME: 'ORDERS' }, 'table_name'), 'ORDERS');

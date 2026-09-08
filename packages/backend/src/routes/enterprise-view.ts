@@ -6,7 +6,8 @@ import { people } from './people';
 import { dataDomains } from './data-domains';
 import { dataLineageLinks } from './data-lineage';
 import { dataQualityRules } from './data-quality';
-import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
+import { getVisibleOrgScope } from '../lib/org-scope';
+import { scopeListForRequest } from '../lib/tenant-scope';
 import { effectiveHealthScore } from '../lib/asset-health';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
@@ -83,12 +84,9 @@ router.get('/', async (req: Request, res: Response) => {
   // cross-hierarchy edges up to the deepest visible ancestor, so the full tree
   // is sent and the drilling happens client-side.
   const topLevels = new Set(['VALUE_STREAM', 'PROCESS', 'SUBPROCESS', 'ACTIVITY']);
-  const filteredProcesses = orgId
-    ? (() => {
-        const scope = getVisibleOrgScope(orgId as string)!;
-        return allNodes.filter((p) => scope.has(p.orgId) || (p.orgIds || []).some((id) => scope.has(id)));
-      })()
-    : allNodes;
+  // Enforce the caller's visible-org set (plus any explicit ?orgId), multi-org
+  // node aware — so omitting orgId can't aggregate across tenants.
+  const filteredProcesses = scopeListForRequest(req, allNodes);
   for (const p of filteredProcesses) {
     if (!topLevels.has(p.level)) continue;
     addNode({
@@ -112,8 +110,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   // Systems
-  const filteredSystems = orgId
-    ? filterByOrgScope(allSystems, orgId as string) : allSystems;
+  const filteredSystems = scopeListForRequest(req, allSystems);
   for (const s of filteredSystems as any[]) {
     addNode({
       id: s.id, type: 'system',
@@ -123,8 +120,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   // Data assets
-  const filteredAssets = orgId
-    ? filterByOrgScope(allAssets, orgId as string) : allAssets;
+  const filteredAssets = scopeListForRequest(req, allAssets);
   for (const a of filteredAssets) {
     const assetRules = allRules.filter((r) => r.dataAssetId === a.id);
     // Effective health: measured DQ score, or 0 when no measured rule backs it.
@@ -147,8 +143,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   // Data domains
-  const filteredDomains = orgId
-    ? filterByOrgScope(allDomains, orgId as string) : allDomains;
+  const filteredDomains = scopeListForRequest(req, allDomains);
   for (const d of filteredDomains) {
     addNode({
       id: d.id, type: 'domain',
@@ -204,8 +199,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   // Mappings: Process step → Data Asset (loaded via the repo above)
-  const filteredMappings = orgId
-    ? filterByOrgScope(allMappings, orgId as string) : allMappings;
+  const filteredMappings = scopeListForRequest(req, allMappings);
   for (const m of filteredMappings as any[]) {
     // Map to the process node (step/activity) and data asset
     if (nodeIds.has(m.processStepId) && nodeIds.has(m.dataAssetId)) {
@@ -220,8 +214,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   // Lineage: System → System
-  const filteredLineage = orgId
-    ? filterByOrgScope(allLineage, orgId as string) : allLineage;
+  const filteredLineage = scopeListForRequest(req, allLineage);
   for (const l of filteredLineage as any[]) {
     if (nodeIds.has(l.sourceSystemId) && nodeIds.has(l.targetSystemId)) {
       edges.push({

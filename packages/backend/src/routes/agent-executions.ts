@@ -4,6 +4,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { config } from '../config';
 import logger from '../lib/logger';
 import { aiService, GovernanceActivityRun } from '../services/ai.service';
+import { enforceAiBudget } from '../middleware/ai-budget';
 import { agents } from './agents';
 import { processNodes, isGovernanceNode } from './process-catalog';
 import { mappings } from './mappings';
@@ -358,7 +359,7 @@ export async function runAgentExecution(params: {
 }
 
 /** POST /api/v1/agent-executions — ad-hoc, user-triggered run. */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', enforceAiBudget, async (req: Request, res: Response) => {
   try {
     const { orgId, agentId, roleType, activityId } = req.body;
     const userId = (req as Request & { user?: { id?: string } }).user?.id || null;

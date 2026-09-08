@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest } from '../lib/tenant-scope';
 import logger from '../lib/logger';
 import { dataDomains } from './data-domains';
 import { dataAssets } from './data-assets';
@@ -62,12 +62,12 @@ router.get('/summary', async (req: Request, res: Response) => {
       dataAssetsRepo.list(),
       processNodesRepo.list(),
     ]);
-    const filteredIssues = filterByOrgScope(allIssues, orgFilter);
-    const filteredTasks = filterByOrgScope(allTasks, orgFilter);
-    const filteredPolicies = filterByOrgScope(allPolicies, orgFilter);
-    const filteredControls = filterByOrgScope(allControls, orgFilter);
-    const filteredDomains = filterByOrgScope(allDomains, orgFilter);
-    const filteredAssets = filterByOrgScope(allAssets, orgFilter);
+    const filteredIssues = scopeListForRequest(req, allIssues);
+    const filteredTasks = scopeListForRequest(req, allTasks);
+    const filteredPolicies = scopeListForRequest(req, allPolicies);
+    const filteredControls = scopeListForRequest(req, allControls);
+    const filteredDomains = scopeListForRequest(req, allDomains);
+    const filteredAssets = scopeListForRequest(req, allAssets);
     const filteredProcesses = orgFilter
       ? allNodes.filter((n) => {
           // processNodes use orgId + orgIds (multi-org), mirror the

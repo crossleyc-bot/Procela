@@ -6,6 +6,7 @@
 // failed run.
 
 import { buildSelectSql } from './sql';
+import { assertConnectableHost } from './ssrf-guard';
 import type { DbSourceRequest, SourceRow } from './types';
 import { SUPPORTED_DB_SOURCE_TYPES } from './types';
 import { fetchPostgresRows } from './postgres';
@@ -21,6 +22,10 @@ export async function fetchDbRows(req: DbSourceRequest): Promise<SourceRow[]> {
   }
   if (!req.host || !req.host.trim()) throw new Error('Database source is missing a host');
   if (!req.database || !req.database.trim()) throw new Error('Database source is missing a database name');
+
+  // SSRF guard: refuse the cloud metadata / link-local range before opening a
+  // socket (and loopback/private too when DB_SOURCE_BLOCK_PRIVATE_HOSTS is set).
+  await assertConnectableHost(req.host);
 
   const sql = buildSelectSql(req.dbType, {
     schema: req.schema,

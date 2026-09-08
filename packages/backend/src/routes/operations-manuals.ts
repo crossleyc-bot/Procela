@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import logger from '../lib/logger';
 import { getOperationsManualsRepository } from '../db/operations-manuals.repo';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -277,8 +277,7 @@ const router = Router();
 
 /** GET /api/v1/operations-manuals — list with ?orgId= filter */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = filterByOrgScope(await operationsManualsRepo.list(), orgId as string | undefined);
+  const filtered = scopeListForRequest(req, await operationsManualsRepo.list());
   res.json({ success: true, data: filtered });
 });
 
@@ -286,6 +285,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const manual = await operationsManualsRepo.get(String(req.params.id));
   if (!manual) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
+  if (!assertOrgAccess(req, res, manual.orgId, 'Operations manual not found')) return;
   res.json({ success: true, data: manual });
 });
 

@@ -30,6 +30,7 @@ import { computeRescanHealth } from '../lib/schema-drift';
 // so a static value import would close an initialization cycle.
 import type { SchemaDriftEvent } from './governance-issues';
 import { requireAiEnabled } from '../middleware/ai-enabled';
+import { enforceAiBudget } from '../middleware/ai-budget';
 
 export interface StoredDataAsset {
   id: string;
@@ -1484,7 +1485,7 @@ function similarity(a: string, b: string): number {
   return Math.min(1, jaccard + sub);
 }
 
-router.get('/:id/suggest-source', requireAiEnabled, async (req: Request, res: Response) => {
+router.get('/:id/suggest-source', requireAiEnabled, enforceAiBudget, async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
@@ -1967,7 +1968,7 @@ function filterTagsByRegime<T extends string>(tags: readonly T[], orgId: string 
 }
 
 /** POST /api/v1/data-assets/:id/suggest-sensitivity */
-router.post('/:id/suggest-sensitivity', requireAiEnabled, async (req: Request, res: Response) => {
+router.post('/:id/suggest-sensitivity', requireAiEnabled, enforceAiBudget, async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;

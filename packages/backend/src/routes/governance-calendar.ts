@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest } from '../lib/tenant-scope';
 import { auditService } from '../services/audit.service';
 import { people } from './people';
 import logger from '../lib/logger';
@@ -147,8 +147,8 @@ const router = Router();
 
 /** GET /api/v1/governance-calendar — list events */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, status, eventType } = req.query;
-  let filtered = filterByOrgScope(await calendarEventsRepo.list(), orgId as string | undefined);
+  const { status, eventType } = req.query;
+  let filtered = scopeListForRequest(req, await calendarEventsRepo.list());
   if (status) filtered = filtered.filter((e) => e.status === status);
   if (eventType) filtered = filtered.filter((e) => e.eventType === eventType);
 
@@ -158,13 +158,12 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-calendar/upcoming?orgId=X&days=30 */
 router.get('/upcoming', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
   const days = Math.max(1, parseInt((req.query.days as string) || '30', 10));
   const now = new Date();
   const windowEnd = new Date(now);
   windowEnd.setDate(windowEnd.getDate() + days);
 
-  const events = filterByOrgScope(await calendarEventsRepo.list(), orgId as string | undefined)
+  const events = scopeListForRequest(req, await calendarEventsRepo.list())
     .filter((e) => e.status === 'ACTIVE');
 
   const peopleById = await loadPeopleById();

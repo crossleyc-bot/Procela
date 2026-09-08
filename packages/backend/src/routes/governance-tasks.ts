@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { people } from './people';
 import { createNotification } from './notifications';
 import logger from '../lib/logger';
@@ -220,8 +220,7 @@ router.post('/sweep-overdue', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-tasks/summary */
 router.get('/summary', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = filterByOrgScope(await governanceTasksRepo.list(), orgId as string | undefined);
+  const filtered = scopeListForRequest(req, await governanceTasksRepo.list());
 
   const byStatus: Record<string, number> = {};
   const byPriority: Record<string, number> = {};
@@ -242,8 +241,8 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-tasks */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, status, assigneeId, taskType, priority } = req.query;
-  let filtered = filterByOrgScope(await governanceTasksRepo.list(), orgId as string | undefined);
+  const { status, assigneeId, taskType, priority } = req.query;
+  let filtered = scopeListForRequest(req, await governanceTasksRepo.list());
 
   if (status) filtered = filtered.filter((t) => t.status === status);
   if (assigneeId) filtered = filtered.filter((t) => t.assigneeId === assigneeId);
@@ -258,6 +257,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const task = await governanceTasksRepo.get(String(req.params.id));
   if (!task) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
+  if (!assertOrgAccess(req, res, task.orgId, 'Governance task not found')) return;
   res.json({ success: true, data: enrichTask(task, await peopleRepo().list()) });
 });
 

@@ -8,7 +8,7 @@ import { governanceGroups } from './governance-groups';
 import { mappings } from './mappings';
 import { connections } from './connections';
 import { glossaryTerms } from './business-glossary';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest } from '../lib/tenant-scope';
 // Global search is a read aggregator across 9 stores; each is read through
 // its repository so results come from Postgres in DB mode and the in-memory
 // array in JSON mode (the factory wraps the same array these modules export).
@@ -106,7 +106,6 @@ function escapeRegex(s: string): string {
  *  carries a `path` the frontend can navigate to directly. */
 router.get('/', async (req: Request, res: Response) => {
   const q = (req.query.q as string || '').trim();
-  const orgId = (req.query.orgId as string) || null;
 
   if (!q) {
     res.json({ success: true, data: { results: [], query: '' } });
@@ -130,7 +129,7 @@ router.get('/', async (req: Request, res: Response) => {
   };
 
   // Systems
-  push(filterByOrgScope(systems, orgId).flatMap((sys) => {
+  push(scopeListForRequest(req, systems).flatMap((sys) => {
     const score = scoreMatch(q, sys.name, sys.description);
     if (score < 0) return [];
     return [{
@@ -144,7 +143,7 @@ router.get('/', async (req: Request, res: Response) => {
   }));
 
   // Data assets
-  push(filterByOrgScope(dataAssets, orgId).flatMap((a) => {
+  push(scopeListForRequest(req, dataAssets).flatMap((a) => {
     const score = scoreMatch(q, a.name, a.description);
     if (score < 0) return [];
     return [{
@@ -159,7 +158,7 @@ router.get('/', async (req: Request, res: Response) => {
 
   // Activities (process nodes) — score includes parent path so
   // "Billing > Invoice > Issue" can be found by typing "issue".
-  push(filterByOrgScope(processNodes, orgId).flatMap((n) => {
+  push(scopeListForRequest(req, processNodes).flatMap((n) => {
     const score = scoreMatch(q, n.name, n.description);
     if (score < 0) return [];
     const parent = n.parentId ? processNodes.find((p) => p.id === n.parentId) : null;
@@ -174,7 +173,7 @@ router.get('/', async (req: Request, res: Response) => {
   }));
 
   // Connections
-  push(filterByOrgScope(connections, orgId).flatMap((c) => {
+  push(scopeListForRequest(req, connections).flatMap((c) => {
     const score = scoreMatch(q, c.name);
     if (score < 0) return [];
     return [{
@@ -188,7 +187,7 @@ router.get('/', async (req: Request, res: Response) => {
   }));
 
   // People
-  push(filterByOrgScope(people, orgId).flatMap((p) => {
+  push(scopeListForRequest(req, people).flatMap((p) => {
     const score = scoreMatch(q, p.name, p.email);
     if (score < 0) return [];
     return [{
@@ -202,7 +201,7 @@ router.get('/', async (req: Request, res: Response) => {
   }));
 
   // Data domains
-  push(filterByOrgScope(dataDomains, orgId).flatMap((d) => {
+  push(scopeListForRequest(req, dataDomains).flatMap((d) => {
     const score = scoreMatch(q, d.name, d.description);
     if (score < 0) return [];
     return [{
@@ -216,7 +215,7 @@ router.get('/', async (req: Request, res: Response) => {
   }));
 
   // Governance groups
-  push(filterByOrgScope(governanceGroups, orgId).flatMap((g) => {
+  push(scopeListForRequest(req, governanceGroups).flatMap((g) => {
     const score = scoreMatch(q, g.name, g.description);
     if (score < 0) return [];
     return [{
@@ -230,7 +229,7 @@ router.get('/', async (req: Request, res: Response) => {
   }));
 
   // Glossary terms
-  push(filterByOrgScope(glossaryTerms, orgId).flatMap((t) => {
+  push(scopeListForRequest(req, glossaryTerms).flatMap((t) => {
     const score = scoreMatch(q, t.term, t.definition);
     if (score < 0) return [];
     return [{
@@ -245,7 +244,7 @@ router.get('/', async (req: Request, res: Response) => {
 
   // Mappings — useful for "where does X feed Y" searches. Subtitle
   // shows both ends so the row carries enough context.
-  push(filterByOrgScope(mappings, orgId).flatMap((m) => {
+  push(scopeListForRequest(req, mappings).flatMap((m) => {
     const step = processNodes.find((n) => n.id === m.processStepId);
     const asset = dataAssets.find((a) => a.id === m.dataAssetId);
     if (!step && !asset) return [];

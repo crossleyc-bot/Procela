@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { people } from './people';
 import { dataDomains } from './data-domains';
 import { dataAssets } from './data-assets';
@@ -432,8 +432,7 @@ const router = Router();
 
 /** GET /api/v1/governance-issues/summary */
 router.get('/summary', async (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = filterByOrgScope(await governanceIssuesRepo.list(), orgId as string | undefined);
+  const filtered = scopeListForRequest(req, await governanceIssuesRepo.list());
 
   const byStatus: Record<string, number> = {};
   const bySeverity: Record<string, number> = {};
@@ -457,8 +456,8 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-issues */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, status, severity, issueType, assignedTo, domainId } = req.query;
-  let filtered = filterByOrgScope(await governanceIssuesRepo.list(), orgId as string | undefined);
+  const { status, severity, issueType, assignedTo, domainId } = req.query;
+  let filtered = scopeListForRequest(req, await governanceIssuesRepo.list());
 
   if (status) filtered = filtered.filter((i) => i.status === status);
   if (severity) filtered = filtered.filter((i) => i.severity === severity);
@@ -474,6 +473,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const issue = await governanceIssuesRepo.get(String(req.params.id));
   if (!issue) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
+  if (!assertOrgAccess(req, res, issue.orgId, 'Governance issue not found')) return;
   const [allPeople, allDomains, allAssets] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list(), dataAssetsRepo().list()]);
   res.json({ success: true, data: enrichIssue(issue, allPeople, allDomains, allAssets) });
 });
