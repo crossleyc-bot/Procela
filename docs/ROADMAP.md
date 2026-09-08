@@ -122,6 +122,43 @@ architectural unknowns.*
 - Reporting / export polish (Report Builder, executive/operational
   dashboards, PDF/CSV export all ship).
 
+## Track E — canonical data-model gaps
+
+*From the **Canonical EDM Review** (a shipbuilder's enterprise data model,
+14 capabilities · 52 domains · 195 sub-domains · 30 entities, cross-checked
+against Procela's model). Most of that review is already built — sub-domains,
+system-of-record, the master-data signal, CUI/ITAR/export classification,
+structured hierarchical codes, and entity primary-keys/relationships all
+shipped. These are the items it flagged as **still open**.*
+**Size: one large bet (E2), the rest small–medium.**
+
+- **E1 — Business Capability level above Data Domain.** The file's taxonomy
+  is Capability → Domain → Sub-Domain → Entity; Procela's data hierarchy
+  tops out at Domain (a Capability level exists only in the *process* tree).
+  Add the top rung so the data model matches how enterprises group domains.
+  *Fit: extends the domain hierarchy. Effort: medium.*
+- **E2 — Shared / co-stewardship register.** The review's most sophisticated
+  idea: data jointly governed by two capabilities, each shared boundary
+  recording a primary + co-steward, the shared assets, decision authority,
+  and an escalation path. Procela has multiple stewards but all within one
+  org — a cross-org/-capability co-steward with explicit decision rules is a
+  genuine differentiator (the ungoverned "seams" between teams are exactly
+  the incidents Procela exists to prevent). *Fit: new cross-org governance
+  concept. Effort: high.*
+- **E3 — Data-model versioning for domains & assets.** Process nodes already
+  have proposed-vs-approved snapshotting + a change log; bring domains and
+  data assets up to the same, so a model change is reviewable rather than
+  silent. *Currently partial (process nodes only). Effort: medium.*
+- **E4 — Partition / business dimension (the "hull" concept).** Slice a
+  domain's data by a business key — hull, region, program, product line —
+  with per-partition stewardship. Powerful but specialized; generalize only
+  if multiple customers ask. *Effort: medium–high, deliberately deferred.*
+- **E5 — Source-scope → domain mapping.** The Phase-3 Discover loop (real
+  scan → measured DQ → reconcile into the catalog) shipped; the remaining
+  refinement is auto-mapping a connector's scan scope to the domains it
+  feeds, so discovered assets land in the right domain without hand-sorting.
+  *Fit: extends the Discover loop. Effort: small–medium.*
+
 ---
 
 ## Snapshot
@@ -132,6 +169,7 @@ architectural unknowns.*
 | **B** | Production-scale hardening | Medium | A running deploy (task #3) |
 | **C** | Commercial SaaS readiness | Large / Med / Small | Go-to-market = self-serve SaaS |
 | **D** | Depth on existing features | Small–Med | Nothing; incremental anytime |
+| **E** | Canonical data-model gaps (EDM review) | Large (E2) / Small–Med | Nothing; incremental anytime |
 
 **Not yet decided:** which track leads. That is a go-to-market call, not a
 technical one — capture the decision here when it's made and sequence the

@@ -75,8 +75,10 @@ customer.
 - [ ] **11. `KMS_PROVIDER` / `MFA_ENCRYPTION_KEY`** — encryption at
   rest is **code-complete** (`services/crypto.service.ts` +
   `services/kms-providers.ts`, with tests). It now covers TOTP secrets,
-  the **dbt Cloud API token**, and the **OIDC `clientSecret`** — each
-  enveloped on write and decrypted only at the point of use. It encrypts
+  the **dbt Cloud API token**, the **OIDC `clientSecret`**, and
+  **direct-connect connection credentials** (`password` / `apiKey` /
+  `token`, via `services/connection-secrets.ts`) — each enveloped on
+  write and decrypted only at the point of use. It encrypts
   when a key / KMS provider is configured and falls back to plaintext
   **only in dev** (with a boot warning) when neither is set. **On AWS,
   Terraform now generates + injects `MFA_ENCRYPTION_KEY` automatically
@@ -161,8 +163,20 @@ customer.
   suite over all three packages on push + weekly + **on every PR**,
   surfacing findings as code-scanning alerts and, on PRs, as **inline
   annotations on the changed lines** (the repo is public, so code
-  scanning is free — no GitHub Advanced Security needed). A **pen test**
-  is still outstanding.
+  scanning is free — no GitHub Advanced Security needed).
+
+  An **in-house application security review** has also been completed: a
+  full pass over the backend's multi-tenant isolation, RBAC, injection/
+  SSRF, secret handling and AI-endpoint abuse. It found and fixed a
+  systemic tenant-isolation gap — cross-tenant read/write/**delete**
+  (IDOR) reachable by omitting `orgId` — by enforcing the caller's
+  visible-org set server-side across every catalog and read/aggregation
+  route, plus six lower-severity fixes (AI-budget enforcement on the
+  off-mount AI endpoints, an SSRF host denylist for direct-connect,
+  MySQL literal-escaping, a mis-scoped audit `orgId`, and connection-
+  credential encryption at rest). Landed across PRs #522–#524 with
+  regression tests. An **external, third-party pen test** is still
+  outstanding — that engagement is the remaining part of this item.
 - [x] ~~**23. DR runbook.**~~ **Written** — [`docs/DR_RUNBOOK.md`](./DR_RUNBOOK.md)
   covers restore-from-backup (PITR / snapshot / JSON fallback), migration
   roll-back, and secret / API-key rotation, grounded in `deploy/terraform/`
