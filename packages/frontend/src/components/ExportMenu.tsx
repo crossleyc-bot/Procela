@@ -22,8 +22,11 @@ import { ExportFormat, FORMAT_LABELS, ExportPayload, exportData } from '../lib/e
 
 interface ExportMenuProps {
   /** Builds the payload at click time. Returning null cancels the export
-   *  (e.g. data not yet loaded). */
-  build: () => ExportPayload | null;
+   *  (e.g. data not yet loaded). May be async — a surface that has to fetch
+   *  the full result set before exporting (e.g. the Report Builder, whose
+   *  on-screen table is only a capped preview) returns a Promise, and the
+   *  chosen format's "…" busy state shows for the duration. */
+  build: () => ExportPayload | null | Promise<ExportPayload | null>;
   /** Tooltip on the trigger button. Defaults to "Export". */
   label?: string;
   /** Which formats to offer. Defaults to all four. */
@@ -60,10 +63,12 @@ export default function ExportMenu({
   }, [open]);
 
   const handlePick = async (format: ExportFormat) => {
-    const payload = build();
-    if (!payload) { setOpen(false); return; }
+    // Mark busy before awaiting build() — an async builder (fetch-then-export)
+    // must show the "…" state while it runs, not only during exportData.
     setBusy(format);
     try {
+      const payload = await build();
+      if (!payload) { setOpen(false); return; }
       await exportData(format, payload);
       if (format === 'clipboard') {
         addToast('success', 'Copied to clipboard.');
