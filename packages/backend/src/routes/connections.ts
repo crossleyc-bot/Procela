@@ -11,6 +11,7 @@ import logger from '../lib/logger';
 import { hasDatabase } from '../db/prisma';
 import { getConnectionsRepository } from '../db/connections.repo';
 import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
+import { encryptCredentials } from '../services/connection-secrets';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -283,7 +284,8 @@ router.post('/', async (req: Request, res: Response) => {
     name,
     connectionType,
     config: config || {},
-    credentials: credentials || {},
+    // Encrypt secret fields at rest (no-op until a KMS/local key is configured).
+    credentials: await encryptCredentials(credentials || {}),
     status: 'UNTESTED',
     lastTestedAt: null,
     lastTestResult: null,
@@ -361,6 +363,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
   }
 
+  // Encrypt any freshly-provided plaintext secrets before persisting; kept
+  // (already-enveloped) secrets are skipped by isEncrypted, so no double-wrap.
+  conn.credentials = await encryptCredentials(conn.credentials);
   conn.updatedAt = new Date().toISOString();
   await connectionsRepo.update(conn.id, {
     name: conn.name,

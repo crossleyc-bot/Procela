@@ -9,6 +9,7 @@ import { systems } from './systems';
 import { glossaryTerms } from './business-glossary';
 import { connections } from './connections';
 import { connectors } from './connectors';
+import { decryptCredentials } from '../services/connection-secrets';
 import logger from '../lib/logger';
 import { getSyncConnectionsRepository } from '../db/sync-connections.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
@@ -235,7 +236,8 @@ async function resolveEffectiveConfig(sc: SyncConnection): Promise<SyncConnectio
     // CSV_URL / JSON_URL — pull baseUrl when sync didn't carry its own
     if (conn.config.baseUrl && !merged.url) merged.url = conn.config.baseUrl;
     if (!merged.authHeader) {
-      const cred = conn.credentials || {};
+      // Decrypt at-rest credentials before building the outbound auth header.
+      const cred = await decryptCredentials(conn.credentials) || {};
       if (cred.apiKey) merged.authHeader = `Bearer ${cred.apiKey}`;
       else if (cred.token) merged.authHeader = `Bearer ${cred.token}`;
       else if (cred.username && cred.password) {
@@ -266,7 +268,8 @@ async function resolveDbSource(sc: SyncConnection): Promise<DbSourceRequest> {
       if (conn.config.port && !cfg.port) cfg.port = conn.config.port;
       if (conn.config.database && !cfg.database) cfg.database = conn.config.database;
       if (conn.config.schema && !cfg.schema) cfg.schema = conn.config.schema;
-      creds = { username: conn.credentials?.username, password: conn.credentials?.password };
+      const dc = await decryptCredentials(conn.credentials);
+      creds = { username: dc?.username, password: dc?.password };
     }
   }
 
