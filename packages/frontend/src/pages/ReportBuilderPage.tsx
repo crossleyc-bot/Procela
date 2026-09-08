@@ -7,6 +7,8 @@ import { useToastStore } from '../stores/toastStore';
 import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
+import ExportMenu from '../components/ExportMenu';
+import type { Cell, ExportPayload } from '../lib/export';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Report Builder — Phase 2 of the Reports rebuild.
@@ -266,6 +268,36 @@ export default function ReportBuilderPage() {
       setSaving(false);
     }
   }, [canSave, activeOrgId, reportId, name, description, visibility, def, addToast, navigate]);
+
+  // ── Export ───────────────────────────────────────────────────────────────
+  // The on-screen preview is capped at 50 rows; an export must carry the whole
+  // result set. So the builder re-runs the current spec at the server's hard
+  // cap (10 000) at click time — no separate saved report needed — and maps
+  // the rendered rows straight into the shared export payload. Async so the
+  // ExportMenu shows its busy state while the fetch runs.
+  const buildExport = useCallback(async (): Promise<ExportPayload | null> => {
+    if (!activeOrgId || !def.entity || def.columns.length === 0) return null;
+    const res = await apiClient.post<{ success: boolean; data: RunResult }>(`/reports/preview`, {
+      orgId: activeOrgId, definition: { ...def, limit: 10_000 },
+    });
+    const result = res.data;
+    if (result.rows.length === 0) {
+      addToast('info', 'No rows match the current filters — nothing to export.');
+      return null;
+    }
+    if (result.totalMatched > result.rows.length) {
+      addToast('info', `Export capped at ${result.rows.length.toLocaleString()} of ${result.totalMatched.toLocaleString()} matched rows.`);
+    }
+    const headers = result.columns.map((c) => c.label);
+    const rows: Cell[][] = result.rows.map((row) =>
+      result.columns.map((c) => toExportCell(row[c.field])),
+    );
+    const base = (name.trim() || entity?.label || 'report')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report';
+    return { filenameBase: base, headers, rows, sheetName: name.trim() || entity?.label || 'Report' };
+  }, [activeOrgId, def, name, entity, addToast]);
+
+  const canExport = Boolean(activeOrgId && def.entity && def.columns.length > 0);
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -542,13 +574,21 @@ export default function ReportBuilderPage() {
 
           {/* Preview */}
           <div style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <label style={{ ...labelStyle, marginBottom: 0 }}>Preview</label>
-              {preview && (
-                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                  Showing {preview.rows.length} of {preview.totalMatched} rows
-                </span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {preview && (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    Showing {preview.rows.length} of {preview.totalMatched} rows
+                  </span>
+                )}
+                <ExportMenu
+                  build={buildExport}
+                  disabled={!canExport}
+                  label="Export report"
+                  formats={['csv', 'xlsx', 'json', 'pdf', 'clipboard']}
+                />
+              </div>
             </div>
 
             {previewError && (
@@ -599,6 +639,15 @@ export default function ReportBuilderPage() {
 function formatCell(v: unknown): string {
   if (v == null) return '';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (Array.isArray(v)) return v.join(', ');
+  return String(v);
+}
+
+// Map a rendered report cell to the export layer's Cell. Scalars pass through
+// so numbers stay numeric in XLSX/JSON; arrays and objects flatten to text.
+function toExportCell(v: unknown): Cell {
+  if (v == null) return '';
+  if (typeof v === 'boolean' || typeof v === 'number' || typeof v === 'string') return v;
   if (Array.isArray(v)) return v.join(', ');
   return String(v);
 }
