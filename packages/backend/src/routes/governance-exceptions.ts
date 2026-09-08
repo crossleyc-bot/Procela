@@ -12,7 +12,7 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, registerStore } from '../lib/persistence';
 import { getGovernanceExceptionsRepository } from '../db/governance-exceptions.repo';
 import { auditService } from '../services/audit.service';
-import { filterByOrgScope } from '../lib/org-scope';
+import { scopeListForRequest } from '../lib/tenant-scope';
 
 export interface StoredGovernanceException {
   id: string;
@@ -53,9 +53,8 @@ const router = Router();
 
 /** GET /api/v1/governance-exceptions?orgId= — list, org-scoped. */
 router.get('/', async (req: Request, res: Response) => {
-  const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : undefined;
   const all = await repo.list();
-  const scoped = orgId ? filterByOrgScope(all, orgId) : all;
+  const scoped = scopeListForRequest(req, all);
   // Newest-granted first; surface past-expiry with a derived flag for the UI.
   const now = Date.now();
   const data = [...scoped]

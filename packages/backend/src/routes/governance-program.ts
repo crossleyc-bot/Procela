@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
+import { assertOrgAccess } from '../lib/tenant-scope';
 import { hasPermission } from '../lib/permissions';
 import { AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
@@ -663,6 +664,7 @@ router.get('/:id/status', async (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Governance program not found' });
     return;
   }
+  if (!assertOrgAccess(req, res, program.orgId, 'Governance program not found')) return;
   const status = await computePhaseStatus(program);
   res.json({ success: true, data: status });
 });
@@ -674,6 +676,7 @@ router.get('/:id/recommendations', async (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Governance program not found' });
     return;
   }
+  if (!assertOrgAccess(req, res, program.orgId, 'Governance program not found')) return;
   const recommendations = await computeRecommendations(program);
   res.json({ success: true, data: recommendations });
 });

@@ -16,6 +16,7 @@ import { getGovernanceControlsRepository } from '../db/governance-controls.repo'
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { hasDatabase } from '../db/prisma';
 import { getVisibleOrgScope, getAncestorOrgIds, getCachedOrgList } from '../lib/org-scope';
+import { scopeListForRequest, assertOrgAccessAny } from '../lib/tenant-scope';
 import { auditService } from '../services/audit.service';
 // data-assets and mappings both import from this file, so adding the
 // matching imports here creates a circular dep. Resolve the
@@ -688,7 +689,9 @@ router.get('/', async (req: Request, res: Response) => {
           return true;
         });
       })()
-    : allNodes;
+    // No explicit orgId: still enforce the caller's own visible-org set so a
+    // restricted user can't read every tenant's nodes by omitting the param.
+    : scopeListForRequest(req, allNodes);
   const valueStreams = filtered.filter((n) => n.level === 'VALUE_STREAM');
   // Enrich with owner names so the frontend can display them inline
   const enriched = filtered.map((n) => {
@@ -726,6 +729,7 @@ router.get('/value-streams', (_req: Request, res: Response) => {
 router.get('/nodes/:id', (req: Request, res: Response) => {
   const node = findNode(param(req.params.id));
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+  if (!assertOrgAccessAny(req, res, [node.orgId, ...(node.orgIds || [])], 'Node not found')) return;
 
   // Build ancestry path
   const ancestry: ProcessNode[] = [];
@@ -1307,6 +1311,8 @@ router.post('/nodes/:id/clone', async (req: Request, res: Response) => {
 
 /** GET /nodes/:id/validate — validate a value stream's integrity */
 router.get('/nodes/:id/validate', (req: Request, res: Response) => {
+  const vNode = findNode(param(req.params.id));
+  if (vNode && !assertOrgAccessAny(req, res, [vNode.orgId, ...(vNode.orgIds || [])], 'Node not found')) return;
   const result = validateProcessIntegrity(param(req.params.id));
   res.json({ success: true, data: result });
 });
@@ -1437,6 +1443,7 @@ router.get('/nodes/:id/history', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const node = findNode(nodeId);
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+  if (!assertOrgAccessAny(req, res, [node.orgId, ...(node.orgIds || [])], 'Node not found')) return;
 
   const versions = (await processVersionsRepo.list())
     .filter((v) => v.nodeId === nodeId)
@@ -1449,6 +1456,8 @@ router.get('/nodes/:id/history', async (req: Request, res: Response) => {
 router.get('/nodes/:id/history/:versionId', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const versionId = param(req.params.versionId);
+  const histNode = findNode(nodeId);
+  if (histNode && !assertOrgAccessAny(req, res, [histNode.orgId, ...(histNode.orgIds || [])], 'Version not found')) return;
 
   const version = (await processVersionsRepo.list()).find((v) => v.id === versionId && v.nodeId === nodeId);
   if (!version) { res.status(404).json({ success: false, error: 'Version not found' }); return; }

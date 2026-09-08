@@ -8,7 +8,8 @@ import { people } from './people';
 import { connections, connectionSystemLinks } from './connections';
 import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
 import { systems } from './systems';
-import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
+import { getVisibleOrgScope } from '../lib/org-scope';
+import { scopeListForRequest } from '../lib/tenant-scope';
 import { effectiveHealthScore } from '../lib/asset-health';
 // Gap detection is a read aggregator across 7 stores; each is read through
 // its repository so gaps are computed from Postgres in DB mode and the
@@ -63,23 +64,13 @@ router.get('/', async (req: Request, res: Response) => {
     peopleRepo.list(), connectionsRepo.list(), systemsRepo.list(), mappingsRepo.list(),
   ]);
 
-  // Scope by org
-  const nodes = orgId
-    ? (() => {
-        const scope = getVisibleOrgScope(orgId as string)!;
-        return processNodes.filter((n) => scope.has(n.orgId) || (n.orgIds || []).some((id) => scope.has(id)));
-      })()
-    : processNodes;
-  const assets = orgId
-    ? filterByOrgScope(dataAssets, orgId as string)
-    : dataAssets;
-  const domains = orgId
-    ? filterByOrgScope(dataDomains, orgId as string)
-    : dataDomains;
+  // Scope by org — enforces the caller's visible-org set plus any explicit
+  // ?orgId, and handles multi-org process nodes (orgId + orgIds[]).
+  const nodes = scopeListForRequest(req, processNodes);
+  const assets = scopeListForRequest(req, dataAssets);
+  const domains = scopeListForRequest(req, dataDomains);
 
-  const filteredMappings = orgId
-    ? filterByOrgScope(mappings, orgId as string)
-    : mappings;
+  const filteredMappings = scopeListForRequest(req, mappings);
 
   const mappedStepIds = new Set(filteredMappings.map((m: any) => m.processStepId));
   const mappedAssetIds = new Set(filteredMappings.map((m: any) => m.dataAssetId));
@@ -179,12 +170,7 @@ router.get('/', async (req: Request, res: Response) => {
     for (const sid of d.stewardIds) ownerIds.add(sid);
   }
 
-  const allPeople = orgId
-    ? (() => {
-        const scope = getVisibleOrgScope(orgId as string)!;
-        return people.filter((p) => (p.orgIds || []).some((id) => scope.has(id)));
-      })()
-    : people;
+  const allPeople = scopeListForRequest(req, people);
   const unassignedPeople = allPeople
     .filter((p) => !ownerIds.has(p.id))
     .map((p) => ({ id: p.id, name: p.name, role: p.role }));
@@ -192,9 +178,7 @@ router.get('/', async (req: Request, res: Response) => {
   // 9. Connections without a system — registered but not yet wired into
   // the business view. Filter to the visible org scope when one was
   // provided so the gap respects multi-tenant boundaries.
-  const orgScopedConnections = orgId
-    ? filterByOrgScope(connections, orgId as string)
-    : connections;
+  const orgScopedConnections = scopeListForRequest(req, connections);
   // Which connections have at least one linked system — read the link
   // table through its repository (the raw array is empty in Postgres mode).
   const allLinks = await connectionSystemLinksRepo.list();
@@ -206,9 +190,7 @@ router.get('/', async (req: Request, res: Response) => {
   // 10. Ownerless systems — INTEGRATED systems with no business owner
   // assigned. MANUAL/EXTERNAL systems often live outside Procela's
   // ownership model so we don't penalise them here.
-  const orgScopedSystems = orgId
-    ? filterByOrgScope(systems, orgId as string)
-    : systems;
+  const orgScopedSystems = scopeListForRequest(req, systems);
   const ownerlessSystems = orgScopedSystems
     .filter((s) => (s.connectivity || 'INTEGRATED') === 'INTEGRATED' && !s.ownerPersonId)
     .map((s) => ({ id: s.id, name: s.name, systemType: s.systemType, businessCriticality: s.businessCriticality }));
