@@ -61,9 +61,10 @@ remaining item is proving it end to end against a real customer database.*
   discover/reconcile** flow — introspection reads approximate row counts from
   engine catalog statistics, and reconciling a source refreshes the asset's
   fingerprint + liveness health and raises the same `SCHEMA_DRIFT` issue on a
-  changed column set. (Direct-connect fingerprints are column-name-based;
-  introspection doesn't fetch column types, so a pure retype isn't flagged
-  there.)
+  changed column set. Introspection now reads column **data types** too, so
+  the direct-connect fingerprint keys on name+type — a pure column retype
+  (same name, changed type) is flagged as drift on that path, matching the
+  connector report ingest.
 
 ## Track B — production-scale hardening
 
