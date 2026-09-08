@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { requireAiEnabled } from '../middleware/ai-enabled';
+import { enforceAiBudget } from '../middleware/ai-budget';
 import { getCachedOrgList } from '../lib/org-scope';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { auditService } from '../services/audit.service';
@@ -177,7 +178,7 @@ const router = Router();
  * Returns the suggestions without committing them — the frontend shows
  * a preview and the user picks which to keep.
  */
-router.post('/generate', requireAiEnabled, async (req: Request, res: Response) => {
+router.post('/generate', requireAiEnabled, enforceAiBudget, async (req: Request, res: Response) => {
   const { industry } = req.body;
   if (!industry || typeof industry !== 'string') {
     res.status(400).json({ success: false, error: 'industry is required' });
@@ -230,7 +231,7 @@ router.post('/generate', requireAiEnabled, async (req: Request, res: Response) =
  * /generate, returns suggestions without committing — the frontend previews
  * them and the user picks which to keep, then creates them with the parent set.
  */
-router.post('/generate-subdomains', requireAiEnabled, async (req: Request, res: Response) => {
+router.post('/generate-subdomains', requireAiEnabled, enforceAiBudget, async (req: Request, res: Response) => {
   const { industry, parentName, parentDescription } = req.body || {};
   if (!industry || typeof industry !== 'string') {
     res.status(400).json({ success: false, error: 'industry is required' });

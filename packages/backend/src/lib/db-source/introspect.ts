@@ -45,9 +45,17 @@ export function defaultSchema(dbType: DbSourceType, database: string): string {
 
 /** Single-quote-escape a value for safe inclusion in a SQL string literal.
  *  The catalog filters compare against a string literal (schema/owner name),
- *  not an identifier, so doubling embedded quotes is the injection boundary. */
-export function escapeLiteral(value: string): string {
-  return value.replace(/'/g, "''");
+ *  not an identifier, so doubling embedded quotes is the injection boundary.
+ *
+ *  MySQL (unless NO_BACKSLASH_ESCAPES is set) also treats backslash as an
+ *  escape character inside a string literal, so a value ending in `\` could
+ *  otherwise escape the closing quote and break out of the literal. Postgres
+ *  (standard_conforming_strings, on by default), SQL Server and Oracle treat
+ *  backslash literally, so doubling it there would corrupt a legitimate name —
+ *  hence the escape is engine-specific. */
+export function escapeLiteral(value: string, dbType?: DbSourceType): string {
+  const quoted = value.replace(/'/g, "''");
+  return dbType === 'MYSQL' ? quoted.replace(/\\/g, '\\\\') : quoted;
 }
 
 /**
@@ -55,7 +63,7 @@ export function escapeLiteral(value: string): string {
  * (table_name, table_type). Bounded by MAX_DISCOVERED_TABLES.
  */
 export function buildTableListSql(dbType: DbSourceType, schema: string): string {
-  const s = escapeLiteral(schema);
+  const s = escapeLiteral(schema, dbType);
   switch (dbType) {
     case 'POSTGRESQL':
     case 'MYSQL':
@@ -84,7 +92,7 @@ export function buildTableListSql(dbType: DbSourceType, schema: string): string 
  * Bounded by MAX_DISCOVERED_COLUMNS.
  */
 export function buildColumnListSql(dbType: DbSourceType, schema: string): string {
-  const s = escapeLiteral(schema);
+  const s = escapeLiteral(schema, dbType);
   switch (dbType) {
     case 'POSTGRESQL':
     case 'MYSQL':
@@ -109,7 +117,7 @@ export function buildColumnListSql(dbType: DbSourceType, schema: string): string
  * don't appear or report null, which the caller maps to "unknown".
  */
 export function buildRowCountSql(dbType: DbSourceType, schema: string): string {
-  const s = escapeLiteral(schema);
+  const s = escapeLiteral(schema, dbType);
   switch (dbType) {
     case 'POSTGRESQL':
       // reltuples is the planner's estimate; -1 (PG14+, never analyzed) maps
