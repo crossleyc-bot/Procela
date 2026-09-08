@@ -154,12 +154,15 @@ describe('activity attributes — criticality, RTO, SLA, controls', () => {
     it('accepts RPO, trigger, and volume; validates RPO and clears each', async () => {
       const set = await request(port, 'PUT', `/process-catalog/nodes/${actId}`, {
         rpoHours: 1, trigger: 'Event-driven', volume: '  ~10k events/day  ',
+        nextReviewDate: '2026-12-31', riskMitigation: '  Compensating manual control  ',
       });
       assert.strictEqual(set.status, 200);
       let node = processNodes.find((n: any) => n.id === actId);
       assert.strictEqual(node.rpoHours, 1);
       assert.strictEqual(node.trigger, 'Event-driven');
       assert.strictEqual(node.volume, '~10k events/day'); // trimmed
+      assert.strictEqual(node.nextReviewDate, '2026-12-31');
+      assert.strictEqual(node.riskMitigation, 'Compensating manual control'); // trimmed
 
       // RPO is range-checked like RTO.
       const badRpo = await request(port, 'PUT', `/process-catalog/nodes/${actId}`, { rpoHours: -2 });
@@ -167,13 +170,15 @@ describe('activity attributes — criticality, RTO, SLA, controls', () => {
 
       // Empty / null clears each.
       const clear = await request(port, 'PUT', `/process-catalog/nodes/${actId}`, {
-        rpoHours: null, trigger: '', volume: '',
+        rpoHours: null, trigger: '', volume: '', nextReviewDate: '', riskMitigation: '',
       });
       assert.strictEqual(clear.status, 200);
       node = processNodes.find((n: any) => n.id === actId);
       assert.strictEqual(node.rpoHours, undefined);
       assert.strictEqual(node.trigger, undefined);
       assert.strictEqual(node.volume, undefined);
+      assert.strictEqual(node.nextReviewDate, undefined);
+      assert.strictEqual(node.riskMitigation, undefined);
     });
 
     it('silently drops unknown controlIds from the request', async () => {

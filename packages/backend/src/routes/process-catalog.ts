@@ -169,6 +169,15 @@ export interface ProcessNode {
    *  day". `frequency` captures cadence; this captures scale, which is
    *  what actually drives criticality and sizing. */
   volume?: string;
+  /** Next scheduled governance review date (ISO "YYYY-MM-DD"), forward-
+   *  looking — distinct from `reviewedAt` (the last review's timestamp).
+   *  Free-text date string so a review cadence can be tracked without a
+   *  dedicated scheduler. Undefined = not set. */
+  nextReviewDate?: string;
+  /** How the activity's risk is mitigated — free-text notes complementing
+   *  `riskLevel` (High/Medium/Low) with the controls or compensations that
+   *  bring it down. Undefined = not set. */
+  riskMitigation?: string;
   /** Governance controls this activity implements or is subject to.
    *  IDs point at StoredGovernanceControl rows. Cascade: when a
    *  control is deleted, its id is swept from every activity's
@@ -742,7 +751,7 @@ router.post('/nodes', async (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
-    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, controlIds } = req.body;
+    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -859,6 +868,8 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ...(combineTargetSla(successMeasure, slaTarget) ? { successMeasure: combineTargetSla(successMeasure, slaTarget) } : {}),
     ...(typeof trigger === 'string' && trigger.trim() ? { trigger: trigger.trim() } : {}),
     ...(typeof volume === 'string' && volume.trim() ? { volume: volume.trim() } : {}),
+    ...(typeof nextReviewDate === 'string' && nextReviewDate.trim() ? { nextReviewDate: nextReviewDate.trim() } : {}),
+    ...(typeof riskMitigation === 'string' && riskMitigation.trim() ? { riskMitigation: riskMitigation.trim() } : {}),
     ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
@@ -889,7 +900,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
-    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, controlIds,
+    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
     reviewComment } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
@@ -942,6 +953,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     || criticalityTier !== undefined || rtoHours !== undefined || rpoHours !== undefined
     || successMeasure !== undefined || slaTarget !== undefined
     || trigger !== undefined || volume !== undefined
+    || nextReviewDate !== undefined || riskMitigation !== undefined
     || controlIds !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
   const nodeOrg = getCachedOrgList().find((o) => o.id === node.orgId) as any;
@@ -1031,6 +1043,8 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   }
   if (trigger !== undefined) node.trigger = (typeof trigger === 'string' && trigger.trim()) ? trigger.trim() : undefined;
   if (volume !== undefined) node.volume = (typeof volume === 'string' && volume.trim()) ? volume.trim() : undefined;
+  if (nextReviewDate !== undefined) node.nextReviewDate = (typeof nextReviewDate === 'string' && nextReviewDate.trim()) ? nextReviewDate.trim() : undefined;
+  if (riskMitigation !== undefined) node.riskMitigation = (typeof riskMitigation === 'string' && riskMitigation.trim()) ? riskMitigation.trim() : undefined;
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
       ? await cleanControlIds(controlIds)

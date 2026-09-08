@@ -110,6 +110,8 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
         slaTarget: 'P95 30 min',
         trigger: 'EVENT',
         volume: '~200 outages/yr',
+        nextReviewDate: '2026-12-31',
+        riskMitigation: 'Redundant SCADA feed + manual dispatch fallback',
         domain: 'OPERATIONAL',
         version: 2,
         submittedBy: null,
@@ -141,6 +143,8 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
     assert.strictEqual(r.rpoHours, 1);
     assert.strictEqual(r.trigger, 'EVENT');
     assert.strictEqual(r.volume, '~200 outages/yr');
+    assert.strictEqual(r.nextReviewDate, '2026-12-31');
+    assert.strictEqual(r.riskMitigation, 'Redundant SCADA feed + manual dispatch fallback');
     // Four M2M joins flattened.
     assert.deepStrictEqual(r.orgIds, ['o1', 'o2']);
     assert.deepStrictEqual(r.controlIds, ['c-1']);
@@ -161,7 +165,7 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
         statusJustification: null, frequency: null, riskLevel: null,
         automationLevel: null, estimatedDuration: null, criticalityTier: null,
         rtoHours: null, rpoHours: null, successMeasure: null, slaTarget: null,
-        trigger: null, volume: null,
+        trigger: null, volume: null, nextReviewDate: null, riskMitigation: null,
         domain: 'OPERATIONAL', version: 1, submittedBy: null,
         submittedAt: null, reviewedBy: null, reviewedAt: null,
         reviewComment: null,
@@ -176,7 +180,7 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
         statusJustification: null, frequency: null, riskLevel: null,
         automationLevel: null, estimatedDuration: null, criticalityTier: null,
         rtoHours: null, rpoHours: null, successMeasure: null, slaTarget: null,
-        trigger: null, volume: null,
+        trigger: null, volume: null, nextReviewDate: null, riskMitigation: null,
         domain: 'OPERATIONAL', version: 1, submittedBy: null,
         submittedAt: null, reviewedBy: null, reviewedAt: null,
         reviewComment: null,

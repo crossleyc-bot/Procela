@@ -281,6 +281,11 @@ model ProcessNode {
   slaTarget           String?
   trigger             String?
   volume              String?
+  // Forward-looking governance review date (ISO "YYYY-MM-DD"), distinct from
+  // reviewedAt (the last review's timestamp). Free-text date string.
+  nextReviewDate      String?
+  // Free-text notes on how the activity's risk (riskLevel) is mitigated.
+  riskMitigation      String?          @db.Text
   domain              NodeDomain       @default(OPERATIONAL)
   version             Int              @default(1)
   submittedBy         String?          @db.Uuid
