@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, Fragment } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
@@ -7,6 +7,54 @@ import { useAuthStore } from '../stores/authStore';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+}
+
+// A saved conversation as summarised by GET /chat/threads (no transcript).
+interface ThreadSummary {
+  id: string;
+  title: string;
+  messageCount: number;
+  updatedAt: string;
+}
+
+// Context-aware starter prompts. The assistant is grounded in the org's
+// whole catalog, but the page the user is standing on is a strong signal
+// of what they're about to ask — so the empty-state suggestions lead with
+// prompts relevant to the current surface, then fall back to the
+// cross-catalog staples. Keyed by route prefix, longest-match first.
+const PAGE_PROMPTS: Array<{ prefix: string; prompts: string[] }> = [
+  { prefix: '/data-assets/orphans', prompts: ['Which data assets do we have that no process uses?', 'Which orphan assets are ungoverned (Bronze tier)?'] },
+  { prefix: '/data-assets', prompts: ['Which assets are below 80% health and linked to critical processes?', 'Which data assets are still on the Bronze tier?'] },
+  { prefix: '/gap-detection', prompts: ['Where are our data gaps?', 'Which critical process steps have no data coverage?'] },
+  { prefix: '/processes/data-map', prompts: ['Which systems run our customer-facing processes?', 'Which processes depend on our least-governed data?'] },
+  { prefix: '/processes', prompts: ['Which processes have no owner assigned?', 'Where are our data gaps across the process catalog?'] },
+  { prefix: '/systems', prompts: ['Which systems support the most processes?', 'Which systems have no data assets registered?'] },
+  { prefix: '/data-quality', prompts: ['Which assets are failing their data-quality rules?', 'Which critical assets have no quality rules at all?'] },
+  { prefix: '/data-domains', prompts: ['Which data domains have the weakest governance?', 'Which domains own our lowest-health assets?'] },
+  { prefix: '/people', prompts: ['Who owns the most processes and data assets?', 'Which owners have ungoverned assets?'] },
+  { prefix: '/reports', prompts: ['What should an executive governance summary cover?', 'Where are our biggest coverage and governance gaps?'] },
+];
+
+const DEFAULT_PROMPTS = [
+  'Where are our data gaps?',
+  'Which assets are below 80% health and linked to critical processes?',
+  'Which data assets do we have that no process uses?',
+  'Which systems run our customer-facing processes?',
+];
+
+// Pick the starter prompts for a route: the most specific matching page
+// set, padded out to four with the cross-catalog defaults (de-duplicated).
+function promptsForPath(pathname: string): string[] {
+  const match = PAGE_PROMPTS
+    .filter((p) => pathname === p.prefix || pathname.startsWith(p.prefix + '/') || pathname.startsWith(p.prefix))
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+  const lead = match ? match.prompts : [];
+  const out: string[] = [];
+  for (const p of [...lead, ...DEFAULT_PROMPTS]) {
+    if (!out.includes(p)) out.push(p);
+    if (out.length >= 4) break;
+  }
+  return out;
 }
 
 interface Entity {
@@ -134,6 +182,12 @@ function renderAssistantText(text: string, entities: Entity[]): React.ReactNode 
 export default function ChatPanel() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  // The persisted thread this conversation is being saved to. null until
+  // the first exchange creates a row; cleared by "New chat" and on org
+  // switch so a fresh conversation starts a fresh thread.
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   // Entities for inline citations, scoped to the current conversation
   // mount. The streaming /chat/stream endpoint sends one entities
   // frame at the end of each reply; we keep them around so the
@@ -145,6 +199,78 @@ export default function ChatPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const { activeOrgId, activeOrgName } = useOrgContext();
+  const location = useLocation();
+
+  // Authenticated JSON headers for the thread-persistence endpoints.
+  function authHeaders(): Record<string, string> {
+    const token = useAuthStore.getState().accessToken;
+    return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  }
+
+  // Load the current user's saved conversations for the active org. Best
+  // effort — a failure just leaves the history list empty.
+  async function loadThreads() {
+    if (!activeOrgId) { setThreads([]); return; }
+    try {
+      const res = await fetch(`/api/v1/chat/threads?orgId=${encodeURIComponent(activeOrgId)}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const j = await res.json();
+      if (Array.isArray(j?.data)) setThreads(j.data);
+    } catch { /* history is a convenience; ignore load failures */ }
+  }
+
+  // Re-open a saved conversation: pull its full transcript and make it the
+  // active thread. Entities aren't persisted, so inline links re-appear
+  // only on the next reply — the text itself is intact.
+  async function openThread(id: string) {
+    try {
+      const res = await fetch(`/api/v1/chat/threads/${id}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const j = await res.json();
+      if (Array.isArray(j?.data?.messages)) {
+        setMessages(j.data.messages);
+        setThreadId(j.data.id);
+        setEntities([]);
+        setShowHistory(false);
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function deleteThread(id: string) {
+    try {
+      await fetch(`/api/v1/chat/threads/${id}`, { method: 'DELETE', headers: authHeaders() });
+    } catch { /* ignore */ }
+    if (id === threadId) { setMessages([]); setEntities([]); setThreadId(null); }
+    loadThreads();
+  }
+
+  // Save the conversation after each completed exchange. First exchange
+  // creates the thread; later ones update it in place. Persistence is
+  // best-effort — a save failure never interrupts the chat.
+  async function persistConversation(finalMessages: Message[]) {
+    if (!activeOrgId) return;
+    try {
+      if (threadId) {
+        await fetch(`/api/v1/chat/threads/${threadId}`, {
+          method: 'PUT', headers: authHeaders(), body: JSON.stringify({ messages: finalMessages }),
+        });
+      } else {
+        const res = await fetch('/api/v1/chat/threads', {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({ orgId: activeOrgId, messages: finalMessages }),
+        });
+        if (res.ok) { const j = await res.json(); if (j?.data?.id) setThreadId(j.data.id); }
+      }
+      loadThreads();
+    } catch { /* ignore */ }
+  }
+
+  function newChat() {
+    setMessages([]);
+    setEntities([]);
+    setThreadId(null);
+    setShowHistory(false);
+  }
   // Panel positioning. Mobile pins the panel with margins, riding
   // above the ~60px fixed bottom nav strip; desktop pins a 400x520
   // card to the bottom-right corner. The floating bubble that used
@@ -170,6 +296,24 @@ export default function ChatPanel() {
     window.addEventListener('procela:toggle-chat', handler);
     return () => window.removeEventListener('procela:toggle-chat', handler);
   }, []);
+
+  // Refresh the saved-conversation list whenever the panel opens (so a
+  // thread saved on a previous visit shows up) and whenever the active
+  // org changes.
+  useEffect(() => {
+    if (open) loadThreads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activeOrgId]);
+
+  // Chat threads are org-scoped. Switching orgs starts a clean
+  // conversation so a reply is never saved against the wrong tenant.
+  useEffect(() => {
+    setMessages([]);
+    setEntities([]);
+    setThreadId(null);
+    setShowHistory(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeOrgId]);
 
   // Broadcast open + message count so the top-bar "Ask AI" button
   // can render its own message-count badge and active styling. This
@@ -199,6 +343,7 @@ export default function ChatPanel() {
     setLoading(true);
 
     let assistantText = '';
+    let streamOk = false;
     try {
       const token = useAuthStore.getState().accessToken;
       const res = await fetch('/api/v1/chat/stream', {
@@ -253,6 +398,7 @@ export default function ChatPanel() {
           sep = buf.indexOf('\n\n');
         }
       }
+      streamOk = true;
     } catch {
       // On any stream failure, replace the empty assistant placeholder
       // with a friendly error so the user isn't left staring at a
@@ -268,21 +414,23 @@ export default function ChatPanel() {
     } finally {
       setLoading(false);
     }
+
+    // Persist the completed exchange so it survives a reload and shows up
+    // in history. Only on a clean stream with real content — a failed turn
+    // isn't worth saving.
+    if (streamOk && assistantText) {
+      persistConversation([...updated, { role: 'assistant', content: assistantText }]);
+    }
   }
 
   async function handleSend() {
     await send(input.trim());
   }
 
-  // Starter prompts shown when the chat is empty. Mix of CLAUDE.md
-  // examples and Phase 3 surfaces (orphan assets, system declarations)
-  // so newcomers immediately see what the grounded assistant can do.
-  const SUGGESTED_PROMPTS = [
-    'Where are our data gaps?',
-    'Which assets are below 80% health and linked to critical processes?',
-    'Which data assets do we have that no process uses?',
-    'Which systems run our customer-facing processes?',
-  ];
+  // Starter prompts shown when the chat is empty. Lead with prompts
+  // relevant to the page the user is on, then fall back to the
+  // cross-catalog staples (see promptsForPath / PAGE_PROMPTS above).
+  const SUGGESTED_PROMPTS = promptsForPath(location.pathname);
 
   return (
     <>
@@ -311,11 +459,9 @@ export default function ChatPanel() {
             overflow: 'hidden',
           }}
         >
-          {/* Header. "New chat" only appears once there's a
-              conversation to reset — otherwise it clutters the
-              first-time-open experience. Minimize is separate from
-              new chat: minimizing keeps state, new chat throws it
-              away — two intents, two buttons. */}
+          {/* Header. "History" opens the list of saved conversations;
+              "New chat" starts a fresh thread (the current one is already
+              saved). Minimize keeps state — three intents, three buttons. */}
           <div
             style={{
               padding: '12px 16px',
@@ -331,12 +477,32 @@ export default function ChatPanel() {
           >
             <span>AI Assistant</span>
             <div style={{ display: 'flex', gap: 6 }}>
+              {threads.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowHistory((s) => !s)}
+                  title="Saved conversations"
+                  aria-label="Saved conversations"
+                  aria-expanded={showHistory}
+                  style={{
+                    background: showHistory ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '4px 10px',
+                    fontSize: 11, fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  History
+                </button>
+              )}
               {messages.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => { setMessages([]); setEntities([]); }}
+                  onClick={newChat}
                   disabled={loading}
-                  title="Start a new conversation (clears history)"
+                  title="Start a new conversation (the current one is saved)"
                   aria-label="Start a new conversation"
                   style={{
                     background: 'rgba(255,255,255,0.15)',
@@ -371,6 +537,80 @@ export default function ChatPanel() {
               </button>
             </div>
           </div>
+
+          {/* Saved-conversation history. A dismissible list that sits over
+              the message area; picking a row re-opens that conversation. */}
+          {showHistory && (
+            <div
+              style={{
+                borderBottom: '1px solid var(--color-border)',
+                backgroundColor: 'var(--color-bg)',
+                maxHeight: 220,
+                overflowY: 'auto',
+              }}
+            >
+              {threads.length === 0 ? (
+                <div style={{ padding: 16, fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                  No saved conversations yet.
+                </div>
+              ) : (
+                threads.map((t) => (
+                  <div
+                    key={t.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '8px 12px',
+                      borderBottom: '1px solid var(--color-border)',
+                      background: t.id === threadId ? 'var(--color-surface)' : 'transparent',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openThread(t.id)}
+                      title={t.title}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        textAlign: 'left',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--color-text)',
+                        padding: 0,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {t.title}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
+                        {t.messageCount} message{t.messageCount === 1 ? '' : 's'} · {new Date(t.updatedAt).toLocaleDateString()}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteThread(t.id)}
+                      title="Delete this conversation"
+                      aria-label={`Delete conversation: ${t.title}`}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--color-text-muted)',
+                        fontSize: 14,
+                        lineHeight: 1,
+                        padding: '2px 4px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           {/* Messages */}
           <div
