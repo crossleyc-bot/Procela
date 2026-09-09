@@ -33,38 +33,16 @@ runs real catalog discovery, measures data quality live, and reconciles the
 results into the governed catalog. The on-prem connector agent covers
 firewalled sources with the same five-engine + dbt coverage. The one
 remaining item is proving it end to end against a real customer database.*
-**Size: large. The core differentiator — now built.**
+**Size: large. The core differentiator is built; only the pilot (A1) is open.**
 
 - **A1 — Real-customer connector pilot.** Run the shipped agent against a
   live customer database (GO_LIVE_CHECKLIST **#25**'s sole remaining
   item). Everything upstream is done and green in CI; this is the first
   real-world scan and the thing that proves the whole Phase-3 thesis.
-- **A2 — Discovered-asset → business-definition reconciliation.**
-  _Shipped._ A suggest-and-confirm reconciliation flow matches each
-  discovered table to an existing business-defined asset (by name
-  similarity) or creates a new Bronze `DataAsset`, materializing its
-  columns so DQ rules can attach — the bridge between the technical and
-  business layers that Procela's premise rests on. Connection-rooted from
-  the Connections **Discover** view.
-- **A3 — Source-fed health scores.** _Delivered._ Both the on-prem
-  connector **and** a direct-connect database now feed **measured**
-  `health_score` from real DQ results for the five pushdown-safe rule types
-  (null-rate via NOT_NULL, uniqueness, set/range/length checks); the
-  direct-Connection DQ-simulation gap is closed, so a cloud-reachable
-  database measures too. Freshness/row-count already drove the connector's
-  discovered-asset health, now joined by **schema-drift** (a persisted
-  column-set fingerprint on `DataAsset` is compared each scan — a changed
-  column set penalizes the health score and raises an auto-resolving
-  `SCHEMA_DRIFT` governance issue) and a **graded row-count-delta** (a shrink
-  scored by magnitude). Both signals now cover **both scan paths**: the
-  connector report ingest, and the cloud-reachable **direct-connect
-  discover/reconcile** flow — introspection reads approximate row counts from
-  engine catalog statistics, and reconciling a source refreshes the asset's
-  fingerprint + liveness health and raises the same `SCHEMA_DRIFT` issue on a
-  changed column set. Introspection now reads column **data types** too, so
-  the direct-connect fingerprint keys on name+type — a pure column retype
-  (same name, changed type) is flagged as drift on that path, matching the
-  connector report ingest.
+
+*(A2 discovered-asset reconciliation and A3 source-fed health — measured DQ,
+schema-drift, graded row-count-delta, column-retype detection — are built and
+merged; see the git history and the readiness record. Only A1 remains.)*
 
 ## Track B — production-scale hardening
 
