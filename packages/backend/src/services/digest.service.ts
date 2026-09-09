@@ -33,6 +33,8 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, registerStore } from '../lib/persistence';
 import { getGapSnapshotsRepository } from '../db/gap-snapshots.repo';
 import { createNotification } from '../routes/notifications';
+import { isConfigured as isMailConfigured, sendDigestEmail } from './mail.service';
+import { listPreferencesForOrg, type DigestCategory } from './digest-preferences';
 import logger from '../lib/logger';
 
 export interface GapMetrics {
@@ -140,15 +142,20 @@ async function findPreviousSnapshot(orgId: string, current: GapSnapshot): Promis
   return undefined;
 }
 
+interface FiredItem {
+  /** Which gap-signal this item belongs to — drives per-user email
+   *  category filtering (see services/digest-preferences). */
+  category: DigestCategory;
+  type: 'INFO' | 'WARNING' | 'ACTION';
+  title: string;
+  message: string;
+  link: string;
+}
+
 interface DigestRule {
   /** Returns the notification body to write, or null if the rule
    *  doesn't fire on this delta. */
-  evaluate(prev: GapMetrics, curr: GapMetrics): null | {
-    type: 'INFO' | 'WARNING' | 'ACTION';
-    title: string;
-    message: string;
-    link: string;
-  };
+  evaluate(prev: GapMetrics, curr: GapMetrics): null | FiredItem;
 }
 
 const ORPHAN_THRESHOLD = 3;
@@ -165,6 +172,7 @@ const RULES: DigestRule[] = [
       const delta = curr.orphanAssets - prev.orphanAssets;
       if (delta < ORPHAN_THRESHOLD) return null;
       return {
+        category: 'orphans',
         type: 'WARNING',
         title: `${delta} new orphan data assets this week`,
         message: `${delta} more assets aren't referenced by any process step (now ${curr.orphanAssets} total). Review them via the Unmapped filter on Data Assets.`,
@@ -179,6 +187,7 @@ const RULES: DigestRule[] = [
       const drop = prev.coveragePct - curr.coveragePct;
       if (drop < COVERAGE_DROP_PP) return null;
       return {
+        category: 'coverage',
         type: 'WARNING',
         title: `Mapping coverage dropped to ${curr.coveragePct}%`,
         message: `Was ${prev.coveragePct}% last week, now ${curr.coveragePct}%. ${curr.activities - curr.mappedActivities} of ${curr.activities} activities have no data mapped.`,
@@ -193,6 +202,7 @@ const RULES: DigestRule[] = [
       const delta = curr.ungovernedAssets - prev.ungovernedAssets;
       if (delta < UNGOVERNED_THRESHOLD) return null;
       return {
+        category: 'ungoverned',
         type: 'WARNING',
         title: `${delta} new ungoverned assets in use`,
         message: `${delta} Bronze-tier assets gained a process mapping this week (now ${curr.ungovernedAssets} total). Promote their tier or assign a steward.`,
@@ -207,6 +217,7 @@ const RULES: DigestRule[] = [
       const delta = curr.ownerlessItems - prev.ownerlessItems;
       if (delta < OWNERLESS_THRESHOLD) return null;
       return {
+        category: 'ownerless',
         type: 'ACTION',
         title: `${delta} new ownerless process${delta === 1 ? '' : 'es'}`,
         message: `New value stream(s) or process(es) were created this week without an assigned owner. ${curr.ownerlessItems} total need an owner.`,
@@ -224,18 +235,27 @@ export interface DigestResult {
   snapshot: GapSnapshot;
   notifications: ReturnType<typeof createNotification>[];
   baseline: boolean;
+  /** How many users the digest was emailed to (0 when SMTP is
+   *  unconfigured or nobody opted in). */
+  emailsSent: number;
 }
-export async function digestForOrg(orgId: string, inputs: DigestInputs): Promise<DigestResult> {
+export async function digestForOrg(
+  orgId: string,
+  inputs: DigestInputs,
+  opts: { orgName?: string } = {},
+): Promise<DigestResult> {
   const snapshot = await takeGapSnapshot(orgId, inputs);
   const previous = await findPreviousSnapshot(orgId, snapshot);
   if (!previous) {
     logger.info({ orgId }, 'Digest: baseline snapshot, no notifications written');
-    return { snapshot, notifications: [], baseline: true };
+    return { snapshot, notifications: [], baseline: true, emailsSent: 0 };
   }
   const written: ReturnType<typeof createNotification>[] = [];
+  const fired: FiredItem[] = [];
   for (const rule of RULES) {
     const out = rule.evaluate(previous.metrics, snapshot.metrics);
     if (out) {
+      fired.push(out);
       written.push(createNotification({
         orgId,
         type: out.type,
@@ -245,6 +265,36 @@ export async function digestForOrg(orgId: string, inputs: DigestInputs): Promise
       }));
     }
   }
-  logger.info({ orgId, written: written.length }, 'Digest run complete');
-  return { snapshot, notifications: written, baseline: false };
+  const emailsSent = await deliverDigestEmails(orgId, opts.orgName || orgId, fired);
+  logger.info({ orgId, written: written.length, emailsSent }, 'Digest run complete');
+  return { snapshot, notifications: written, baseline: false, emailsSent };
+}
+
+/** Email the fired items to every user who opted into email delivery, each
+ *  filtered to the gap-signal categories they subscribed to. In-app
+ *  notifications are unaffected — this is a per-user opt-in layer on top.
+ *  A no-op (returns 0) when SMTP isn't configured or nothing fired.
+ *  Best-effort: a delivery error is logged, never thrown, so the digest run
+ *  itself always succeeds. */
+async function deliverDigestEmails(orgId: string, orgName: string, fired: FiredItem[]): Promise<number> {
+  if (fired.length === 0 || !isMailConfigured()) return 0;
+  let sent = 0;
+  try {
+    const prefs = await listPreferencesForOrg(orgId);
+    for (const p of prefs) {
+      if (p.frequency === 'off' || !p.emailEnabled || !p.email) continue;
+      const items = fired.filter((f) => p.categories.includes(f.category));
+      if (items.length === 0) continue;
+      const ok = await sendDigestEmail({
+        to: p.email,
+        name: p.name,
+        orgName,
+        items: items.map((it) => ({ title: it.title, message: it.message, link: it.link })),
+      });
+      if (ok) sent += 1;
+    }
+  } catch (err) {
+    logger.error({ err, orgId }, 'Digest: email delivery failed');
+  }
+  return sent;
 }

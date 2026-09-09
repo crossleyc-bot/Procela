@@ -2,6 +2,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import { useAuthStore } from '@/stores/authStore';
+import { useOrgContext } from '../stores/orgContext';
+
+// The four gap-signal categories the weekly digest can notify on. Labels are
+// user-facing; the keys match the backend (services/digest-preferences).
+const DIGEST_CATEGORIES: Array<{ key: string; label: string }> = [
+  { key: 'orphans', label: 'New orphan data assets' },
+  { key: 'coverage', label: 'Mapping-coverage drops' },
+  { key: 'ungoverned', label: 'Ungoverned assets in use' },
+  { key: 'ownerless', label: 'Ownerless processes' },
+];
+
+interface DigestPreference {
+  frequency: 'weekly' | 'off';
+  categories: string[];
+  emailEnabled: boolean;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // NotificationsMenu — the bell button in the top bar + its dropdown.
@@ -30,12 +46,61 @@ export default function NotificationsMenu() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated } = useAuthStore();
+  const { activeOrgId } = useOrgContext();
 
   const [notifCount, setNotifCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifList, setNotifList] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const notifWrapperRef = useRef<HTMLDivElement>(null);
+
+  // ── Weekly-digest preferences (per user) ──
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [pref, setPref] = useState<DigestPreference | null>(null);
+  const [prefsBusy, setPrefsBusy] = useState(false);
+  const [prefsSaved, setPrefsSaved] = useState(false);
+
+  const fetchPrefs = useCallback(async () => {
+    if (!activeOrgId) return;
+    setPrefsBusy(true);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: DigestPreference }>(
+        `/digest/preferences?orgId=${encodeURIComponent(activeOrgId)}`,
+      );
+      setPref({
+        frequency: res.data.frequency === 'off' ? 'off' : 'weekly',
+        categories: Array.isArray(res.data.categories) ? res.data.categories : [],
+        emailEnabled: !!res.data.emailEnabled,
+      });
+    } catch { /* leave prefs null; the panel shows a retry-friendly empty state */ }
+    finally { setPrefsBusy(false); }
+  }, [activeOrgId]);
+
+  const savePrefs = async () => {
+    if (!activeOrgId || !pref) return;
+    setPrefsBusy(true);
+    setPrefsSaved(false);
+    try {
+      await apiClient.put('/digest/preferences', { orgId: activeOrgId, ...pref });
+      setPrefsSaved(true);
+      setTimeout(() => setPrefsSaved(false), 2000);
+    } catch { /* keep the form as-is so the user can retry */ }
+    finally { setPrefsBusy(false); }
+  };
+
+  const toggleCategory = (key: string) => {
+    setPref((p) => p && ({
+      ...p,
+      categories: p.categories.includes(key)
+        ? p.categories.filter((c) => c !== key)
+        : [...p.categories, key],
+    }));
+  };
+
+  const handlePrefsToggle = () => {
+    if (!prefsOpen && !pref) fetchPrefs();
+    setPrefsOpen((v) => !v);
+  };
 
   // Fetch unread count on mount and route change.
   const fetchNotifCount = useCallback(async () => {
@@ -115,7 +180,7 @@ export default function NotificationsMenu() {
   // Abort an armed "Clear all" whenever the panel closes (toggle,
   // outside-click, Escape, or following a notification) — so an
   // accidental first click is cancelled by any normal interaction.
-  useEffect(() => { if (!notifOpen) disarmClearAll(); }, [notifOpen]);
+  useEffect(() => { if (!notifOpen) { disarmClearAll(); setPrefsOpen(false); } }, [notifOpen]);
 
   const handleDismissNotification = async (id: string) => {
     setNotifList((list) => list.filter((n) => n.id !== id));
@@ -201,7 +266,24 @@ export default function NotificationsMenu() {
             padding: '10px 14px', borderBottom: '1px solid var(--color-border)',
           }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Notifications</span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                onClick={handlePrefsToggle}
+                aria-label="Digest settings"
+                aria-expanded={prefsOpen}
+                title="Weekly digest settings"
+                style={{
+                  background: prefsOpen ? 'var(--color-bg)' : 'none',
+                  border: 'none', cursor: 'pointer', padding: 2, borderRadius: 4,
+                  color: prefsOpen ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  display: 'inline-flex', alignItems: 'center',
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
               {notifList.some((n) => !n.read) && (
                 <button onClick={handleMarkAllRead} style={{
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -221,6 +303,70 @@ export default function NotificationsMenu() {
               )}
             </div>
           </div>
+          {prefsOpen && (
+            <div style={{
+              padding: '12px 14px', borderBottom: '1px solid var(--color-border)',
+              background: 'var(--color-bg)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                Weekly digest
+              </div>
+              {!pref && prefsBusy && (
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</div>
+              )}
+              {!pref && !prefsBusy && (
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Preferences unavailable.</div>
+              )}
+              {pref && (
+                <>
+                  {/* Frequency */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-text)', cursor: 'pointer', marginBottom: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={pref.frequency === 'weekly'}
+                      onChange={(e) => setPref({ ...pref, frequency: e.target.checked ? 'weekly' : 'off' })}
+                    />
+                    Send me a weekly digest
+                  </label>
+                  {/* Categories — only meaningful when the digest is on. */}
+                  <div style={{ opacity: pref.frequency === 'weekly' ? 1 : 0.5, pointerEvents: pref.frequency === 'weekly' ? 'auto' : 'none', marginLeft: 4 }}>
+                    {DIGEST_CATEGORIES.map((c) => (
+                      <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-text-secondary)', cursor: 'pointer', marginBottom: 5 }}>
+                        <input
+                          type="checkbox"
+                          checked={pref.categories.includes(c.key)}
+                          onChange={() => toggleCategory(c.key)}
+                        />
+                        {c.label}
+                      </label>
+                    ))}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-text)', cursor: 'pointer', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
+                      <input
+                        type="checkbox"
+                        checked={pref.emailEnabled}
+                        onChange={(e) => setPref({ ...pref, emailEnabled: e.target.checked })}
+                      />
+                      Also email it to me
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                    <button
+                      onClick={savePrefs}
+                      disabled={prefsBusy}
+                      style={{
+                        background: 'var(--color-primary)', color: '#fff', border: 'none',
+                        borderRadius: 'var(--radius-md)', padding: '5px 14px', fontSize: 12,
+                        fontWeight: 500, cursor: prefsBusy ? 'not-allowed' : 'pointer', opacity: prefsBusy ? 0.6 : 1,
+                      }}
+                    >
+                      Save
+                    </button>
+                    {prefsSaved && <span style={{ fontSize: 11, color: 'var(--color-success, #16a34a)' }}>Saved</span>}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           {notifLoading && (
             <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>Loading...</div>
           )}
