@@ -774,6 +774,28 @@ model ChatThread {
   @@map("chat_threads")
 }
 
+// A single user's weekly-digest preferences within one org. Governs which
+// gap-signal categories they care about and whether the digest is also
+// delivered to them by email (opt-in; in-app notifications are unaffected).
+// email/name are snapshotted from the user's token at write time so the
+// digest sender needn't join back to the directory.
+model DigestPreference {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @db.Uuid
+  userId       String
+  email        String
+  name         String   @default("")
+  frequency    String   @default("weekly")
+  categories   Json     @default("[]")
+  emailEnabled Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+  @@map("digest_preferences")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Governance — Tasks, Issues, Policies, Controls, Groups
 // ─────────────────────────────────────────────────────────────────────────────

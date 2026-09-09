@@ -146,7 +146,11 @@ async function tick(): Promise<void> {
       let totalWritten = 0;
       for (const org of orgs) {
         try {
-          const result = await digestForOrg(org.id, { processNodes: pn, dataAssets: da, mappings: mp });
+          const result = await digestForOrg(
+            org.id,
+            { processNodes: pn, dataAssets: da, mappings: mp },
+            { orgName: (org as { name?: string }).name },
+          );
           totalWritten += result.notifications.length;
         } catch (err) {
           logger.error({ err, orgId: org.id }, 'Scheduler: digest failed for org');

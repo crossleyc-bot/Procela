@@ -253,6 +253,64 @@ export async function sendSupportEmail(args: {
   }
 }
 
+/** Send a weekly-digest email — the same gap-signal deltas the in-app
+ *  notifications carry, delivered to a user who opted in. Each item links
+ *  back into the app. Returns true on successful send, false otherwise
+ *  (not configured, no recipient, no items, or a delivery error). */
+export async function sendDigestEmail(args: {
+  to: string;
+  name: string;
+  orgName: string;
+  items: Array<{ title: string; message: string; link: string }>;
+}): Promise<boolean> {
+  if (!isConfigured() || !transporter || !config || !args.to || args.items.length === 0) return false;
+
+  const base = config.appUrl.replace(/\/$/, '');
+  const abs = (link: string) => (link.startsWith('http') ? link : `${base}${link.startsWith('/') ? '' : '/'}${link}`);
+  const subject = `Procela weekly digest — ${args.items.length} update${args.items.length === 1 ? '' : 's'} for ${args.orgName}`;
+
+  const text = [
+    `Hi ${args.name || 'there'},`,
+    '',
+    `Here's what changed in ${args.orgName}'s data-governance picture this week:`,
+    '',
+    ...args.items.flatMap((it) => [`• ${it.title}`, `  ${it.message}`, `  ${abs(it.link)}`, '']),
+    `You're receiving this because you turned on email delivery for the weekly`,
+    `digest. Change your preferences in Procela under Settings.`,
+    '',
+    '— Procela',
+  ].join('\n');
+
+  const rows = args.items.map((it) => `
+    <tr>
+      <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
+        <a href="${abs(it.link)}" style="color: #0f4f46; font-weight: 600; text-decoration: none;">${escapeHtml(it.title)}</a>
+        <div style="font-size: 13px; color: #64748b; margin-top: 2px;">${escapeHtml(it.message)}</div>
+      </td>
+    </tr>`).join('');
+
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; color: #1e293b; max-width: 560px;">
+      <p>Hi ${escapeHtml(args.name || 'there')},</p>
+      <p>Here's what changed in <strong>${escapeHtml(args.orgName)}</strong>'s data-governance picture this week:</p>
+      <table style="width: 100%; border-collapse: collapse;">${rows}</table>
+      <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">
+        You're receiving this because you turned on email delivery for the weekly digest.
+        Change your preferences in Procela under Settings.
+      </p>
+      <p style="font-size: 12px; color: #94a3b8;">— Procela</p>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({ from: config.from, to: args.to, subject, text, html });
+    return true;
+  } catch (err) {
+    logger.warn({ err, to: args.to }, 'Failed to deliver digest email');
+    return false;
+  }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
