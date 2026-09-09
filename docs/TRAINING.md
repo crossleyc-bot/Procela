@@ -871,7 +871,25 @@ artifacts for stakeholders.
 6. Sort by `Health Score` ascending.
 7. Save as *Ownerless data assets*.
 
-### 8.3 What just happened
+### 8.3 Run, export, and schedule a saved report
+
+Back on **Insights → Review → Reports**, each saved report on the list
+has its own **Run & export** menu. Open the one on *Activities by Risk*
+and pick a format — CSV, Excel, JSON, PDF, or copy to clipboard. Procela
+runs the report against live data and downloads the rows in one step,
+without reopening the Builder.
+
+Notice the row now shows a **Last run … · N rows** line — running a saved
+report records it, so the catalog tells you when each report was last
+executed and how big the result was.
+
+For a recurring report, open it in the Builder and turn on **Email this
+report weekly**, then add a recipient address. On the weekly sweep Procela
+emails the rendered report as a CSV attachment; the catalog marks it with
+a **WEEKLY EMAIL** badge. (Delivery needs SMTP configured for the
+deployment — without it the schedule is saved but nothing is sent.)
+
+### 8.4 What just happened
 
 Every Report Builder report reads from the same **Logical Data Model**
 (LDM) that the in-app pickers expose. When Procela later moves to
@@ -1099,13 +1117,18 @@ not training data — so it answers about the org you just built.
 
 Click **Ask AI** in the top bar. That's the only entry point — the
 floating bottom-right bubble is gone; the top-bar button is where
-you open, minimize, and resume the chat. Four starter prompts
-appear when the chat is empty:
+you open, minimize, and resume the chat. Starter prompts appear when
+the chat is empty, and they're **page-aware** — they lead with
+questions relevant to the page you're standing on and fall back to the
+cross-catalog staples. From the Dashboard you'll see the general set:
 
 - Where are our data gaps?
 - Which assets are below 80% health and linked to critical processes?
 - Which data assets do we have that no process uses?
 - Which systems run our customer-facing processes?
+
+Open the panel from **Gap Detection**, **Data Assets → Orphans**, or
+**Systems** and the top suggestions change to match that surface.
 
 ### 11.2 Try the orphan question
 
@@ -1137,15 +1160,22 @@ Process Catalog (Module 3), with the system names rendered as links
 to the Systems page. Switch the **Working in…** scope to Water and
 ask the same question — the answer re-grounds to the new org.
 
-### 11.5 Minimize and continue working
+### 11.5 Minimize, save, and revisit
 
 Click the `–` in the panel header to close the panel and keep
-working elsewhere in the app — the conversation is preserved.
-Notice the **Ask AI** top-bar button now shows a small count badge
-telling you a chat is paused. Click it to resume; every message
-is where you left it. To clear history and start over, click
-**New chat** in the panel header — that's the only way to reset
-the conversation.
+working elsewhere in the app — the conversation is preserved. Notice
+the **Ask AI** top-bar button now shows a small count badge telling
+you a chat is paused. Click it to resume; every message is where you
+left it.
+
+Conversations are now **saved as you go**, so they survive a page
+reload and a return visit — not just the current browser tab. Click
+**History** in the panel header to see your past conversations (each
+titled from its first question); pick one to re-open its full
+transcript, or delete a row with its ×. **New chat** starts a fresh
+thread — the current one is already saved and reachable from History,
+so nothing is thrown away. Conversations are private to you and scoped
+to the org you had active, so switching orgs starts a clean one.
 
 ### 11.6 What it won't do
 
@@ -1202,6 +1232,15 @@ built-in scheduler that fires every hour and, on the first tick
 after Sunday 23:00 UTC each week, walks every org and runs the
 digest for you. The last-fired timestamp is persisted, so a restart
 in the firing window doesn't double-notify.
+
+**Tune it per person.** Click the gear in the notifications dropdown
+to open your own **Weekly digest** settings: turn the digest on or
+off, choose which of the four gap-signal categories you want (new
+orphans, coverage drops, ungoverned-in-use, ownerless processes), and
+optionally **also email it to me**. Email is opt-in and only sends the
+categories you picked — it needs SMTP configured for the deployment,
+and it never changes the in-app bell notifications. Every signed-in
+user sets their own, so this isn't admin-gated.
 
 The same scheduler also runs an **overdue task sweep** every hour:
 any governance task with a due date in the past — status OPEN,
