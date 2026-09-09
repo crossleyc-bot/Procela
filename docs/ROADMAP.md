@@ -102,27 +102,34 @@ shipped. These are the items it flagged as **still open**.*
   tops out at Domain (a Capability level exists only in the *process* tree).
   Add the top rung so the data model matches how enterprises group domains.
   *Fit: extends the domain hierarchy. Effort: medium.*
-- **D2 — Shared / co-stewardship register.** The review's most sophisticated
-  idea: data jointly governed by two capabilities, each shared boundary
-  recording a primary + co-steward, the shared assets, decision authority,
-  and an escalation path. Procela has multiple stewards but all within one
-  org — a cross-org/-capability co-steward with explicit decision rules is a
-  genuine differentiator (the ungoverned "seams" between teams are exactly
-  the incidents Procela exists to prevent). *Fit: new cross-org governance
-  concept. Effort: high.*
+- **D2 — Shared / co-stewardship register.** *(Customer-gated,
+  isolation-sensitive — do not build on spec.)* The review's most
+  sophisticated idea: data jointly governed by two capabilities, each shared
+  boundary recording a primary + co-steward, the shared assets, decision
+  authority, and an escalation path — a genuine differentiator (the
+  ungoverned "seams" between teams are exactly the incidents Procela exists
+  to prevent). But it deliberately cuts across the strict per-`org_id`
+  multi-tenant isolation the B4 security work just hardened: a cross-org
+  shared boundary is new access-control surface where a scoping bug leaks
+  data. Build only against a real customer that needs it, and treat it as a
+  security-sensitive isolation design, not just a feature. *Fit: new
+  cross-org governance concept. Effort: high.*
 - **D3 — Data-model versioning for domains & assets.** Process nodes already
   have proposed-vs-approved snapshotting + a change log; bring domains and
   data assets up to the same, so a model change is reviewable rather than
-  silent. *Currently partial (process nodes only). Effort: medium.*
-- **D4 — Partition / business dimension (the "hull" concept).** Slice a
-  domain's data by a business key — hull, region, program, product line —
-  with per-partition stewardship. Powerful but specialized; generalize only
-  if multiple customers ask. *Effort: medium–high, deliberately deferred.*
-- **D5 — Source-scope → domain mapping.** The Phase-3 Discover loop (real
+  silent. Reuses an existing, proven pattern — the low-risk item on this
+  track. *Currently partial (process nodes only). Effort: medium.*
+- **D4 — Source-scope → domain mapping.** The Phase-3 Discover loop (real
   scan → measured DQ → reconcile into the catalog) shipped; the remaining
   refinement is auto-mapping a connector's scan scope to the domains it
   feeds, so discovered assets land in the right domain without hand-sorting.
-  *Fit: extends the Discover loop. Effort: small–medium.*
+  A bounded automation layer on a loop that already exists. *Fit: extends
+  the Discover loop. Effort: small–medium.*
+
+*(Dropped: a partition / business-dimension "hull" concept — slicing a domain
+by a business key with per-partition stewardship. Reviewed and cut as too
+specialized for the complexity it adds; revisit only if multiple customers
+ask for it.)*
 
 ---
 
