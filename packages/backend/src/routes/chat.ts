@@ -1,7 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { v4 as uuid } from 'uuid';
 import { aiService } from '../services/ai.service';
 import { ChatMessage } from '../types';
 import logger from '../lib/logger';
+import { loadStore, registerStore } from '../lib/persistence';
+import { getChatThreadsRepository } from '../db/chat-threads.repo';
+import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
+import type { AuthenticatedRequest } from '../middleware/auth';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { systems } from './systems';
@@ -45,6 +50,50 @@ const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
 const dataQualityRulesRepo = getDataQualityRulesRepository(dataQualityRules);
 const connectionsRepo = getConnectionsRepository(connections);
 const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionSystemLinks);
+
+// ── Persisted chat threads ──
+// A saved conversation the assistant panel can re-open and replay. Owned
+// by one user (ownerId) within one org — chat history is private to the
+// person who had the conversation, never shared org-wide.
+export interface ChatThread {
+  id: string;
+  orgId: string;
+  ownerId: string | null;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const chatThreads: ChatThread[] = loadStore<ChatThread>('chat-threads');
+registerStore('chat-threads', chatThreads);
+const chatThreadsRepo = getChatThreadsRepository(chatThreads);
+
+/** The signed-in user's id, or null when the request is unauthenticated
+ *  (e.g. a bare test harness that mounts the router without auth). */
+function ownerOf(req: Request): string | null {
+  return (req as { user?: { sub?: string } }).user?.sub || null;
+}
+
+/** A thread is the caller's own when they created it. A null ownerId (a
+ *  thread created before ownership was recorded, or by an unauthenticated
+ *  harness) is treated as accessible so history isn't orphaned. */
+function ownsThread(thread: ChatThread, ownerId: string | null): boolean {
+  return thread.ownerId == null || thread.ownerId === ownerId;
+}
+
+/** List-view projection — the transcript itself is dropped so the
+ *  history list stays small. Only enough to label and sort each row. */
+function threadSummary(t: ChatThread) {
+  return {
+    id: t.id,
+    orgId: t.orgId,
+    title: t.title,
+    messageCount: t.messages.length,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}
 
 const router = Router();
 
@@ -566,6 +615,118 @@ router.post('/stream', async (req: Request, res: Response) => {
     try { send('error', { error: err?.message || 'stream failed' }); res.end(); }
     catch { /* response already closed */ }
   }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Chat-thread persistence.
+//
+// The assistant panel is stateless between visits without this: reload the
+// page and the conversation is gone. These endpoints let the panel save a
+// conversation, list a user's past conversations, re-open one, and delete
+// it. Every thread carries an orgId (multi-tenant scoping) and an ownerId
+// (chat history is private to the person, not the org).
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Validate a messages payload the same way the chat endpoints do.
+ *  Returns an error string, or null when the array is well-formed. */
+function validateMessagesPayload(messages: unknown): string | null {
+  if (!Array.isArray(messages)) {
+    return 'messages must be an array of {role, content} objects.';
+  }
+  for (const msg of messages as ChatMessage[]) {
+    if (!msg || !msg.role || !['user', 'assistant'].includes(msg.role) || typeof msg.content !== 'string') {
+      return 'Each message must have a valid role ("user" or "assistant") and string content.';
+    }
+  }
+  return null;
+}
+
+/** Derive a short title from the first user message. */
+function titleFromMessages(messages: ChatMessage[], fallback = 'New conversation'): string {
+  const firstUser = messages.find((m) => m.role === 'user');
+  const raw = (firstUser?.content || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return fallback;
+  return raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
+}
+
+/** GET /api/v1/chat/threads?orgId=… — the caller's saved conversations in
+ *  the org, newest first, without the transcript bodies. */
+router.get('/threads', async (req: Request, res: Response) => {
+  const ownerId = ownerOf(req);
+  const all = await chatThreadsRepo.list();
+  const scoped = scopeListForRequest(req as AuthenticatedRequest, all)
+    .filter((t) => ownsThread(t, ownerId))
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  res.json({ success: true, data: scoped.map(threadSummary) });
+});
+
+/** GET /api/v1/chat/threads/:id — one conversation with its full transcript. */
+router.get('/threads/:id', async (req: Request, res: Response) => {
+  const thread = await chatThreadsRepo.get(String(req.params.id));
+  if (!thread) { res.status(404).json({ success: false, error: 'Conversation not found' }); return; }
+  if (!assertOrgAccess(req as AuthenticatedRequest, res, thread.orgId, 'Conversation not found')) return;
+  if (!ownsThread(thread, ownerOf(req))) { res.status(404).json({ success: false, error: 'Conversation not found' }); return; }
+  res.json({ success: true, data: thread });
+});
+
+/** POST /api/v1/chat/threads — save a new conversation.
+ *  Body: { orgId, messages, title? }. */
+router.post('/threads', async (req: Request, res: Response) => {
+  const { orgId, messages, title } = req.body || {};
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  const invalid = validateMessagesPayload(messages);
+  if (invalid) { res.status(400).json({ success: false, error: invalid }); return; }
+  if (!assertOrgAccess(req as AuthenticatedRequest, res, orgId, 'Organization not found')) return;
+
+  const now = new Date().toISOString();
+  const thread: ChatThread = {
+    id: uuid(),
+    orgId,
+    ownerId: ownerOf(req),
+    title: (typeof title === 'string' && title.trim()) ? title.trim().slice(0, 120) : titleFromMessages(messages),
+    messages,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await chatThreadsRepo.create(thread);
+  res.status(201).json({ success: true, data: thread });
+});
+
+/** PUT /api/v1/chat/threads/:id — append/replace the transcript as the
+ *  conversation grows, and optionally rename it. Body: { messages?, title? }. */
+router.put('/threads/:id', async (req: Request, res: Response) => {
+  const thread = await chatThreadsRepo.get(String(req.params.id));
+  if (!thread) { res.status(404).json({ success: false, error: 'Conversation not found' }); return; }
+  if (!assertOrgAccess(req as AuthenticatedRequest, res, thread.orgId, 'Conversation not found')) return;
+  if (!ownsThread(thread, ownerOf(req))) { res.status(404).json({ success: false, error: 'Conversation not found' }); return; }
+
+  const { messages, title } = req.body || {};
+  const patch: Partial<ChatThread> = {};
+  if (messages !== undefined) {
+    const invalid = validateMessagesPayload(messages);
+    if (invalid) { res.status(400).json({ success: false, error: invalid }); return; }
+    patch.messages = messages;
+    // Keep an auto-derived title fresh until the user renames it, but never
+    // clobber a title the user set explicitly in the same request.
+    if (title === undefined && (!thread.title || thread.title === 'New conversation')) {
+      patch.title = titleFromMessages(messages, thread.title);
+    }
+  }
+  if (typeof title === 'string' && title.trim()) patch.title = title.trim().slice(0, 120);
+  patch.updatedAt = new Date().toISOString();
+
+  const updated = await chatThreadsRepo.update(thread.id, patch);
+  res.json({ success: true, data: updated });
+});
+
+/** DELETE /api/v1/chat/threads/:id */
+router.delete('/threads/:id', async (req: Request, res: Response) => {
+  const thread = await chatThreadsRepo.get(String(req.params.id));
+  if (!thread) { res.status(404).json({ success: false, error: 'Conversation not found' }); return; }
+  if (!assertOrgAccess(req as AuthenticatedRequest, res, thread.orgId, 'Conversation not found')) return;
+  if (!ownsThread(thread, ownerOf(req))) { res.status(404).json({ success: false, error: 'Conversation not found' }); return; }
+  await chatThreadsRepo.delete(thread.id);
+  res.status(204).send();
 });
 
 export default router;

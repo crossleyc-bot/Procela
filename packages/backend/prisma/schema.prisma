@@ -755,6 +755,25 @@ model Notification {
   @@map("notifications")
 }
 
+// A persisted AI-assistant conversation. `messages` is the opaque
+// ChatMessage[] transcript ({role, content}) the assistant panel
+// replays when a thread is re-opened. Owned by one user within one
+// org — chat history is private to the person who had the
+// conversation, not shared org-wide.
+model ChatThread {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  ownerId   String?
+  title     String
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, ownerId])
+  @@map("chat_threads")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Governance — Tasks, Issues, Policies, Controls, Groups
 // ─────────────────────────────────────────────────────────────────────────────
