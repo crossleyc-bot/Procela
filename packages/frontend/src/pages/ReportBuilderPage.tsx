@@ -68,10 +68,16 @@ interface ReportDefinition {
   limit?: number;
 }
 
+interface ReportSchedule {
+  frequency: 'off' | 'weekly';
+  recipients: string[];
+}
+
 interface StoredReport {
   id: string; orgId: string; name: string; description: string;
   ownerId: string | null; visibility: 'private' | 'org';
   definition: ReportDefinition;
+  schedule?: ReportSchedule | null;
   createdAt: string; updatedAt: string;
 }
 
@@ -140,6 +146,12 @@ export default function ReportBuilderPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Scheduled email delivery (edit mode only — an unsaved report can't be
+  // scheduled). `scheduleOn` toggles frequency weekly/off; recipients is a
+  // comma/newline-separated textarea parsed on save.
+  const [scheduleOn, setScheduleOn] = useState(false);
+  const [scheduleRecipients, setScheduleRecipients] = useState('');
+
   // Load LDM up front.
   useEffect(() => {
     apiClient.get<{ success: boolean; data: { version: string; entities: LdmEntity[] } }>('/data-model')
@@ -160,6 +172,8 @@ export default function ReportBuilderPage() {
           setName(src.name);
           setDescription(src.description);
           setVisibility(src.visibility);
+          setScheduleOn(src.schedule?.frequency === 'weekly');
+          setScheduleRecipients((src.schedule?.recipients || []).join(', '));
         } else {
           setName(`Copy of ${src.name}`);
           setDescription(src.description);
@@ -250,8 +264,12 @@ export default function ReportBuilderPage() {
     setSaving(true);
     try {
       if (reportId) {
+        const recipients = scheduleRecipients.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+        const schedule = scheduleOn
+          ? { frequency: 'weekly', recipients }
+          : { frequency: 'off', recipients };
         const res = await apiClient.put<{ success: boolean; data: StoredReport }>(`/reports/${reportId}`, {
-          name: name.trim(), description: description.trim(), visibility, definition: def,
+          name: name.trim(), description: description.trim(), visibility, definition: def, schedule,
         });
         addToast('success', `Saved "${res.data.name}".`);
       } else {
@@ -267,7 +285,7 @@ export default function ReportBuilderPage() {
     } finally {
       setSaving(false);
     }
-  }, [canSave, activeOrgId, reportId, name, description, visibility, def, addToast, navigate]);
+  }, [canSave, activeOrgId, reportId, name, description, visibility, def, scheduleOn, scheduleRecipients, addToast, navigate]);
 
   // ── Export ───────────────────────────────────────────────────────────────
   // The on-screen preview is capped at 50 rows; an export must carry the whole
@@ -363,6 +381,41 @@ export default function ReportBuilderPage() {
           </div>
         </div>
       </div>
+
+      {/* Scheduled delivery — edit mode only (an unsaved report can't be
+          scheduled). Emails the rendered report (CSV attachment) to the
+          listed recipients on the weekly sweep. */}
+      {reportId && (
+        <div style={cardStyle}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={scheduleOn}
+              onChange={(e) => setScheduleOn(e.target.checked)}
+            />
+            Email this report weekly
+          </label>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 0 24px' }}>
+            Delivered on the weekly sweep as a CSV attachment. Requires email to be configured for the deployment.
+          </div>
+          {scheduleOn && (
+            <div style={{ marginTop: 10, marginLeft: 24 }}>
+              <label style={labelStyle}>Recipients</label>
+              <textarea
+                aria-label="Schedule recipients"
+                value={scheduleRecipients}
+                onChange={(e) => setScheduleRecipients(e.target.value)}
+                placeholder="alice@example.com, bob@example.com"
+                rows={2}
+                style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                Comma- or newline-separated email addresses.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Entity picker */}
       <div style={cardStyle}>

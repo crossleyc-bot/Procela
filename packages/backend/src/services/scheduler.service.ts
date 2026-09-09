@@ -2,6 +2,7 @@ import logger from '../lib/logger';
 import { sweepOverdueTasks } from '../routes/governance-tasks';
 import { captureStatsSnapshot } from '../routes/dashboard';
 import { digestForOrg } from './digest.service';
+import { deliverScheduledReports } from './report-delivery.service';
 import { processNodes } from '../routes/process-catalog';
 import { dataAssets } from '../routes/data-assets';
 import { mappings } from '../routes/mappings';
@@ -160,6 +161,16 @@ async function tick(): Promise<void> {
       logger.info({ totalWritten, orgs: orgs.length }, 'Scheduler: weekly digest fired');
     } catch (err) {
       logger.error({ err }, 'Scheduler: weekly digest failed');
+    }
+
+    // Scheduled report delivery rides the same weekly boundary (and the same
+    // leader gate). Best-effort and a no-op when SMTP is unconfigured, so it's
+    // safe to run unconditionally here.
+    try {
+      const { delivered } = await deliverScheduledReports();
+      if (delivered > 0) logger.info({ delivered }, 'Scheduler: scheduled reports delivered');
+    } catch (err) {
+      logger.error({ err }, 'Scheduler: scheduled report delivery failed');
     }
   }
 

@@ -63,6 +63,7 @@ describe('prismaReportsRepository', () => {
         id: 'a1', orgId: 'o1', name: 'n', description: '', ownerId: null,
         visibility: 'private',
         definition: defaultDefinition,
+        lastRunAt: null, runLog: [], schedule: null,
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),
       }],

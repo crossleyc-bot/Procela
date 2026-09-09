@@ -311,6 +311,70 @@ export async function sendDigestEmail(args: {
   }
 }
 
+/** Deliver a rendered report by email with a CSV attachment. Used by the
+ *  scheduled-report sweep. Returns true on successful send, false otherwise
+ *  (not configured, no recipients, or a delivery error). */
+export async function sendReportEmail(args: {
+  to: string[];
+  reportName: string;
+  orgName: string;
+  headers: string[];
+  rows: Array<Array<string | number | boolean | null | undefined>>;
+  totalMatched: number;
+}): Promise<boolean> {
+  if (!isConfigured() || !transporter || !config || args.to.length === 0) return false;
+
+  const cell = (c: unknown): string => (c === null || c === undefined) ? '' : String(c);
+  const csvEscape = (c: unknown): string => `"${cell(c).replace(/"/g, '""')}"`;
+  const csv = [
+    args.headers.map(csvEscape).join(','),
+    ...args.rows.map((r) => r.map(csvEscape).join(',')),
+  ].join('\r\n');
+
+  const base = (args.reportName || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report';
+  const capped = args.totalMatched > args.rows.length;
+  const subject = `Procela report — ${args.reportName} (${args.rows.length} row${args.rows.length === 1 ? '' : 's'})`;
+
+  const text = [
+    `Your scheduled Procela report "${args.reportName}" for ${args.orgName} is attached.`,
+    '',
+    `Rows: ${args.rows.length}${capped ? ` (of ${args.totalMatched} matched — capped)` : ''}`,
+    `Generated: ${new Date().toLocaleString()}`,
+    '',
+    `The full result set is attached as ${base}.csv.`,
+    '',
+    '— Procela',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; color: #1e293b; max-width: 520px;">
+      <p>Your scheduled Procela report <strong>${escapeHtml(args.reportName)}</strong> for
+         <strong>${escapeHtml(args.orgName)}</strong> is attached.</p>
+      <table style="font-size: 13px; color: #334155; border-collapse: collapse;">
+        <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">Rows</td><td>${args.rows.length}${capped ? ` <span style="color:#94a3b8;">(of ${args.totalMatched} matched — capped)</span>` : ''}</td></tr>
+        <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">Generated</td><td>${escapeHtml(new Date().toLocaleString())}</td></tr>
+      </table>
+      <p style="font-size: 13px; color: #64748b;">The full result set is attached as ${escapeHtml(base)}.csv.</p>
+      <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">— Procela</p>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: config.from,
+      to: args.to,
+      subject,
+      text,
+      html,
+      attachments: [{ filename: `${base}.csv`, content: csv, contentType: 'text/csv; charset=utf-8' }],
+    });
+    return true;
+  } catch (err) {
+    logger.warn({ err, count: args.to.length }, 'Failed to deliver scheduled report email');
+    return false;
+  }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

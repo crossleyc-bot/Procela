@@ -1,7 +1,7 @@
 // Reports repository — the report `definition` is an opaque
 // ReportDefinition JSON blob and round-trips through JSONB.
 
-import type { StoredReport } from '../routes/reports';
+import type { StoredReport, ReportRun, ReportSchedule } from '../routes/reports';
 import type { ReportDefinition } from '../services/report-engine';
 import { saveStore } from '../lib/persistence';
 import { jsonRepository, Repository } from './repository';
@@ -19,6 +19,9 @@ type PrismaReportRow = {
   ownerId: string | null;
   visibility: string;
   definition: unknown;
+  lastRunAt: Date | null;
+  runLog: unknown;
+  schedule: unknown;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -40,6 +43,9 @@ function fromPrisma(r: PrismaReportRow): StoredReport {
     ownerId: r.ownerId ?? null,
     visibility: r.visibility as StoredReport['visibility'],
     definition: r.definition as unknown as ReportDefinition,
+    lastRunAt: r.lastRunAt ? r.lastRunAt.toISOString() : null,
+    runLog: (Array.isArray(r.runLog) ? r.runLog : []) as ReportRun[],
+    schedule: (r.schedule ?? null) as ReportSchedule | null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -54,6 +60,9 @@ function toPrismaData(row: Partial<StoredReport>): Record<string, unknown> {
   if (row.ownerId !== undefined) d.ownerId = row.ownerId ?? null;
   if (row.visibility !== undefined) d.visibility = row.visibility;
   if (row.definition !== undefined) d.definition = row.definition;
+  if (row.lastRunAt !== undefined) d.lastRunAt = row.lastRunAt ? new Date(row.lastRunAt) : null;
+  if (row.runLog !== undefined) d.runLog = row.runLog;
+  if (row.schedule !== undefined) d.schedule = row.schedule ?? null;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;
 }
