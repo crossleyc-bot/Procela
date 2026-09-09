@@ -21,6 +21,27 @@ import { getReportsRepository } from '../db/reports.repo';
 //   POST   /reports/preview  → execute a draft definition without saving
 // ──────────────────────────────────────────────────────────────────────────
 
+/** One recorded execution of a report. Kept in a bounded runLog on the
+ *  report so the catalog can show "last run" without a separate table. */
+export interface ReportRun {
+  ranAt: string;
+  rowCount: number;
+  /** The user who ran it, or null for a scheduled (system) run. */
+  byUserId: string | null;
+  kind: 'manual' | 'scheduled';
+}
+
+/** Optional scheduled delivery for a saved report. */
+export interface ReportSchedule {
+  frequency: 'off' | 'weekly';
+  /** Email addresses the rendered report is delivered to on each run. */
+  recipients: string[];
+}
+
+/** How many runs to retain per report — enough to show recent history in
+ *  the catalog without unbounded growth on a frequently-run report. */
+export const RUN_LOG_LIMIT = 10;
+
 export interface StoredReport {
   id: string;
   orgId: string;
@@ -31,8 +52,34 @@ export interface StoredReport {
    *  access to the org. v1 doesn't model role-based sharing. */
   visibility: 'private' | 'org';
   definition: ReportDefinition;
+  /** Denormalised timestamp of the most recent run, for cheap list sorting. */
+  lastRunAt?: string | null;
+  /** Recent executions, newest first, capped at RUN_LOG_LIMIT. */
+  runLog?: ReportRun[];
+  /** Scheduled delivery config, absent when the report isn't scheduled. */
+  schedule?: ReportSchedule | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Append a run to a report's bounded log and return the patch to persist
+ *  (newest-first, capped, with the denormalised lastRunAt refreshed). */
+export function appendRun(report: StoredReport, run: ReportRun): Partial<StoredReport> {
+  const runLog = [run, ...(report.runLog || [])].slice(0, RUN_LOG_LIMIT);
+  return { runLog, lastRunAt: run.ranAt };
+}
+
+/** Coerce an arbitrary schedule payload to the stored shape (drops junk,
+ *  clamps frequency, keeps only string recipients). Returns null to clear. */
+export function normalizeSchedule(input: unknown): ReportSchedule | null {
+  if (!input || typeof input !== 'object') return null;
+  const s = input as { frequency?: unknown; recipients?: unknown };
+  const frequency: ReportSchedule['frequency'] = s.frequency === 'weekly' ? 'weekly' : 'off';
+  const recipients = Array.isArray(s.recipients)
+    ? s.recipients.filter((r): r is string => typeof r === 'string' && r.trim().length > 0).map((r) => r.trim())
+    : [];
+  if (frequency === 'off' && recipients.length === 0) return null;
+  return { frequency, recipients };
 }
 
 export const reports: StoredReport[] = loadStore<StoredReport>('reports');
@@ -113,6 +160,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (description !== undefined) patch.description = description;
   if (ownerId !== undefined) patch.ownerId = ownerId;
   if (visibility !== undefined) patch.visibility = visibility === 'private' ? 'private' : 'org';
+  if (req.body?.schedule !== undefined) patch.schedule = normalizeSchedule(req.body.schedule);
   patch.updatedAt = new Date().toISOString();
   const updated = await reportsRepo.update(report.id, patch);
   res.json({ success: true, data: updated });
@@ -131,13 +179,19 @@ router.delete('/:id', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
-/** POST /api/v1/reports/:id/run — execute and return rows. */
+/** POST /api/v1/reports/:id/run — execute, record the run, and return rows. */
 router.post('/:id/run', async (req: Request, res: Response) => {
   const report = await reportsRepo.get(String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   try {
     const result = await executeReport(report.definition, report.orgId);
-    res.json({ success: true, data: result });
+    const byUserId = (req as { user?: { sub?: string } }).user?.sub || null;
+    const run: ReportRun = { ranAt: new Date().toISOString(), rowCount: result.totalMatched, byUserId, kind: 'manual' };
+    // Best-effort run-history write — a persistence hiccup shouldn't fail the
+    // run the user asked for; they still get their rows back.
+    try { await reportsRepo.update(report.id, appendRun(report, run)); }
+    catch { /* run history is non-critical */ }
+    res.json({ success: true, data: { ...result, run } });
   } catch (err) {
     res.status(400).json({ success: false, error: err instanceof Error ? err.message : 'Execution failed' });
   }
@@ -162,11 +216,18 @@ router.post('/preview', async (req: Request, res: Response) => {
  *  the catalog page. Keeps the response small for big report
  *  collections. */
 function stripDefinitionForList(r: StoredReport) {
+  const runLog = r.runLog || [];
   return {
     id: r.id, orgId: r.orgId, name: r.name, description: r.description,
     ownerId: r.ownerId, visibility: r.visibility,
     primaryEntity: r.definition.entity,
     columnCount: r.definition.columns.length,
+    // Run-history + schedule summary for the catalog list (full runLog stays
+    // on the detail read).
+    lastRunAt: r.lastRunAt ?? null,
+    lastRunRowCount: runLog[0]?.rowCount ?? null,
+    runCount: runLog.length,
+    scheduleFrequency: r.schedule?.frequency ?? 'off',
     createdAt: r.createdAt, updatedAt: r.updatedAt,
   };
 }
