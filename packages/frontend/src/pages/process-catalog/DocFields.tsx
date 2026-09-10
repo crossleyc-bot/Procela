@@ -300,7 +300,7 @@ export function ControlsPicker({ selected, options, onChange, disabled }: {
 //    legacy comma-joined *name* string (valueMode="name") so no data
 //    migration is needed. ──
 
-export function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, disabledHintLink, placeholder }: {
+export function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, disabledHintLink, placeholder, orgId }: {
   label: string;
   mode: 'single' | 'multi';
   valueMode: 'id' | 'name';
@@ -308,6 +308,10 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
   onChange: (v: any) => void;
   disabled: boolean;
   domain?: 'GOVERNANCE' | 'OPERATIONAL';
+  /** Scope the picker to this org's tree (the active "Working in…" org).
+   *  Without it the picker lists every person the caller can see — which
+   *  for a super-admin spans sibling tenants. */
+  orgId?: string;
   /** If provided, restrict the picker's options to these keys (ids or
    *  names, matching valueMode). Used to gate selection to role-holders
    *  on governance work. */
@@ -335,6 +339,7 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
           disabled={disabled}
           domain={domain}
           eligibleKeys={eligibleKeys}
+          orgId={orgId}
           placeholder={placeholder || (mode === 'single' ? 'Select owner…' : 'Select stakeholders…')}
         />
         {disabled && (disabledHint || disabledHintLink) && (

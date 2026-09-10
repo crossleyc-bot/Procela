@@ -361,7 +361,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         "Business Outcome" field — one field for what this
                         accomplishes and the value it delivers.) */}
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What this accomplishes and the value it delivers…" />
-                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    <DocPersonField label="Owner" orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     {/* Stakeholders removed: the RACI Matrix is the
                         structured home for who's responsible / accountable /
                         consulted / informed. A parallel free-text field just
@@ -387,7 +387,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         Owner-first since they're execution units
                         without a strategic purpose of their own. */}
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    <DocPersonField label="Owner" orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     {/* Stakeholders is not edited here. The RACI Matrix is
                         the structured home for who-needs-to-be-responsible /
                         accountable / consulted / informed; a parallel
@@ -439,6 +439,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                     return (
                       <DocPersonField
                         label="Responsible Person"
+                        orgId={activePageOrgId}
                         mode="single"
                         valueMode="id"
                         value={node.responsiblePersonId || null}

@@ -70,7 +70,10 @@ function loadPickerData(orgId: string | undefined, withGroups: boolean): Promise
   const q = orgId ? `?orgId=${encodeURIComponent(orgId)}` : '';
   const p = (async () => {
     const [peopleRes, orgRes, groupRes] = await Promise.all([
-      apiClient.get<{ success: boolean; data: PickerPerson[] }>('/people'),
+      // Scope people to the same org as the orgs/groups — without `q` the
+      // picker returned every person the caller could see (all tenants for a
+      // super-admin), letting you assign someone from a sibling company.
+      apiClient.get<{ success: boolean; data: PickerPerson[] }>(`/people${q}`),
       apiClient.get<{ success: boolean; data: PickerOrg[] }>(`/organizations${q}`),
       withGroups
         ? apiClient.get<{ success: boolean; data: PickerGroup[] }>(`/governance-groups${q}`)
