@@ -104,14 +104,6 @@ router.get('/', async (req: Request, res: Response) => {
   });
 });
 
-/** GET /api/v1/skills/:id */
-router.get('/:id', async (req: Request, res: Response) => {
-  const skill = await skillsRepo.get(String(req.params.id));
-  if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
-  if (!assertOrgAccess(req, res, skill.orgId, 'Skill not found')) return;
-  res.json({ success: true, data: skill });
-});
-
 /** POST /api/v1/skills — create a skill. Enforces:
  *   - orgId must be a company or division (departments and teams
  *     inherit their parent's catalog; owning at a sub-level would
@@ -373,6 +365,17 @@ router.get('/gap-report', async (req: Request, res: Response) => {
     return;
   }
   res.json({ success: true, data: await orgSkillGapReport(orgId) });
+});
+
+/** GET /api/v1/skills/:id
+ *  Registered LAST so the literal-path GET routes above (/coverage,
+ *  /recommend-for-role, /gap-report) resolve first — a `/:id` registered
+ *  ahead of them matches `id="coverage"` and 404s the real handler. */
+router.get('/:id', async (req: Request, res: Response) => {
+  const skill = await skillsRepo.get(String(req.params.id));
+  if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
+  if (!assertOrgAccess(req, res, skill.orgId, 'Skill not found')) return;
+  res.json({ success: true, data: skill });
 });
 
 export default router;
