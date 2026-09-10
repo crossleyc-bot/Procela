@@ -341,43 +341,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   </button>
                 </div>
               )}
-              {/* "Where it runs" connection summary — read-only one-liner
-                 above the editable fields so the connection landscape
-                 (owner · role · systems · data) is visible at a glance.
-                 Activity-only: it's the only level where all four bits are
-                 real. On Value Streams / Processes / Sub-Processes the
-                 systems and data assets live on the child activities (data
-                 assets always read 0 here), and governance nodes have no
-                 system flows at all — above Activity the summary just
-                 duplicated the Owner field or showed zeros. */}
-              {node.level === 'ACTIVITY' && node.domain !== 'GOVERNANCE' && (() => {
-                const ownerName = node.ownerId ? peopleList.find((p) => p.id === node.ownerId)?.name : null;
-                const sysCount = (node.systemIds || []).length;
-                const assetCount = (mappingsByStep[node.id] || []).length;
-                const role = node.responsibleRole || null;
-                const bits: string[] = [];
-                if (ownerName) bits.push(`Owner: ${ownerName}`);
-                if (role) bits.push(`Role: ${role}`);
-                bits.push(`${sysCount} system${sysCount === 1 ? '' : 's'}`);
-                bits.push(`${assetCount} data asset${assetCount === 1 ? '' : 's'}`);
-                return (
-                  <div style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 6,
-                    fontSize: 11,
-                    padding: '6px 8px',
-                    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-                    borderRadius: 4,
-                  }}>
-                    {/* Label column matches the 100px / muted-color
-                        treatment used by the DocField rows directly
-                        below, so "Where it runs" lines up with "Owner",
-                        "Purpose", etc. instead of being a different
-                        widget. */}
-                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Where it runs:</span>
-                    <span style={{ flex: 1, color: 'var(--color-text-secondary)' }}>{bits.join(' · ')}</span>
-                  </div>
-                );
-              })()}
               {/* Value Stream fields */}
               {node.level === 'VALUE_STREAM' && (() => {
                 const isGov = node.domain === 'GOVERNANCE';
