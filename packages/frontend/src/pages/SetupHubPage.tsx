@@ -90,7 +90,14 @@ const PRIORITY_PALETTE = {
 } as const;
 
 type Src = 'here' | 'auto';
-interface StageItem { label: string; done: boolean; to: string; src: Src }
+// `detail` is a quantified sub-line for Next Actions ("4 processes need an
+// owner"), derived from stats.gaps; `cta` is the verb-specific button label
+// ("Assign owners") that replaces a generic "Go". Both are only surfaced for
+// un-done items in the Next Actions list.
+interface StageItem { label: string; done: boolean; to: string; src: Src; detail?: string; cta?: string }
+
+// "3 assets" / "1 asset" — count with a correctly-pluralised noun.
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 interface Stage { num: number; name: string; color: string; blurb: string; items: StageItem[] }
 
 // Per-stage accent — Capture blue, Assign purple, Govern green, Operate amber.
@@ -127,6 +134,9 @@ export default function SetupHubPage() {
   const [loading, setLoading] = useState(true);
   // Locally bump to re-run the loader after a governed lifecycle transition.
   const [reload, setReload] = useState(0);
+  // Next Actions collapses the later-stage (NEXT) items behind a "show more"
+  // so the current-stage (HIGH) work leads; this toggles the full list.
+  const [showAllLater, setShowAllLater] = useState(false);
 
   // Governed status-transition dialog state (ported from the Program page).
   const [statusTarget, setStatusTarget] = useState<ProgramStatus | null>(null);
@@ -211,26 +221,35 @@ export default function SetupHubPage() {
     const ph = status?.phases;
 
     const capture: StageItem[] = [
-      { label: 'Organization', done: orgCount > 0, to: '/organizations', src: 'here' },
-      { label: 'People', done: gt(s?.people), to: '/people', src: 'here' },
-      { label: 'Processes', done: gt(s?.valueStreams), to: '/processes', src: 'here' },
-      { label: 'Systems', done: gt(s?.systems), to: '/systems', src: 'here' },
-      { label: 'Data assets', done: gt(s?.dataAssets), to: '/data-assets', src: 'here' },
+      { label: 'Organization', done: orgCount > 0, to: '/organizations', src: 'here', detail: 'No organization yet', cta: 'Add organization' },
+      { label: 'People', done: gt(s?.people), to: '/people', src: 'here', detail: 'No people added yet', cta: 'Add people' },
+      { label: 'Processes', done: gt(s?.valueStreams), to: '/processes', src: 'here', detail: 'No value streams yet', cta: 'Add processes' },
+      { label: 'Systems', done: gt(s?.systems), to: '/systems', src: 'here', detail: 'No systems yet', cta: 'Add systems' },
+      { label: 'Data assets', done: gt(s?.dataAssets), to: '/data-assets', src: 'here', detail: 'No data assets yet', cta: 'Add data assets' },
     ];
     // One row per ownable entity type (Process, System, Domain, Data asset).
     // Each deep-links to that type's own page — the Process Catalog, Systems,
     // Data Domains, Data Assets — where you assign owners in context, and each
     // is "done" only once that type exists and none of its items are ownerless.
+    // `detail` quantifies what's left from stats.gaps; when the type doesn't
+    // exist yet the count is meaningless, so point back to Capture instead.
     const assign: StageItem[] = [
-      { label: 'Process ownership', done: !!s && s.valueStreams > 0 && s.gaps.ownerlessItems === 0, to: '/processes', src: 'auto' },
-      { label: 'System ownership', done: !!s && s.systems > 0 && s.gaps.ownerlessSystems === 0, to: '/systems', src: 'auto' },
-      { label: 'Domain ownership', done: !!s && s.dataDomains > 0 && s.gaps.ungovernedDomains === 0, to: '/data-domains', src: 'auto' },
-      { label: 'Data asset ownership', done: !!s && s.dataAssets > 0 && s.gaps.ownerlessAssets === 0, to: '/data-assets', src: 'auto' },
+      { label: 'Process ownership', done: !!s && s.valueStreams > 0 && s.gaps.ownerlessItems === 0, to: '/processes', src: 'auto', cta: 'Assign owners',
+        detail: !s ? undefined : s.valueStreams === 0 ? 'Add processes first' : `${plural(s.gaps.ownerlessItems, 'item')} need an owner` },
+      { label: 'System ownership', done: !!s && s.systems > 0 && s.gaps.ownerlessSystems === 0, to: '/systems', src: 'auto', cta: 'Assign owners',
+        detail: !s ? undefined : s.systems === 0 ? 'Add systems first' : `${plural(s.gaps.ownerlessSystems, 'system')} need an owner` },
+      { label: 'Domain ownership', done: !!s && s.dataDomains > 0 && s.gaps.ungovernedDomains === 0, to: '/data-domains', src: 'auto', cta: 'Assign owners',
+        detail: !s ? undefined : s.dataDomains === 0 ? 'Add domains first' : `${plural(s.gaps.ungovernedDomains, 'domain')} need an owner` },
+      { label: 'Data asset ownership', done: !!s && s.dataAssets > 0 && s.gaps.ownerlessAssets === 0, to: '/data-assets', src: 'auto', cta: 'Assign owners',
+        detail: !s ? undefined : s.dataAssets === 0 ? 'Add data assets first' : `${plural(s.gaps.ownerlessAssets, 'asset')} need an owner` },
     ];
     const govern: StageItem[] = [
-      { label: 'Connect data to processes', done: !!s && s.activities > 0 && s.coverage.percentage >= COVERAGE_DONE_THRESHOLD, to: '/mappings', src: 'here' },
-      { label: 'Tier & grade assets', done: !!s && s.dataAssets > 0 && s.gaps.ungovernedAssets === 0, to: '/data-assets', src: 'here' },
-      { label: 'Governance foundation', done: !!ph?.phase1.completed, to: '/governance/foundation', src: 'here' },
+      { label: 'Connect data to processes', done: !!s && s.activities > 0 && s.coverage.percentage >= COVERAGE_DONE_THRESHOLD, to: '/mappings', src: 'here', cta: 'Connect data',
+        detail: !s ? undefined : s.activities === 0 ? 'Add activities first' : `${plural(s.gaps.unmappedActivities, 'activity', 'activities')} need data linked (${s.coverage.percentage}% covered)` },
+      { label: 'Tier & grade assets', done: !!s && s.dataAssets > 0 && s.gaps.ungovernedAssets === 0, to: '/data-assets', src: 'here', cta: 'Grade assets',
+        detail: !s ? undefined : s.dataAssets === 0 ? 'Add data assets first' : `${plural(s.gaps.ungovernedAssets, 'asset')} need a governance tier` },
+      { label: 'Governance foundation', done: !!ph?.phase1.completed, to: '/governance/foundation', src: 'here', cta: 'Set up',
+        detail: ph ? `Foundation ${ph.phase1.progress}% complete` : 'Set scope, principles & operating model' },
     ];
     // Operate reads strictly top-to-bottom: "Program launched" is gated
     // behind the structure and roles/policies it depends on, so it never
@@ -240,10 +259,13 @@ export default function SetupHubPage() {
     const rolesPoliciesDone = !!(ph?.phase3.completed && ph?.phase4.completed);
     const launched = prog?.status === 'ACTIVE' || prog?.status === 'COMPLETED';
     const operate: StageItem[] = [
-      { label: 'Governance structure', done: structureDone, to: '/governance-groups', src: 'auto' },
-      { label: 'Roles & policies', done: rolesPoliciesDone, to: '/dama-roles', src: 'auto' },
+      { label: 'Governance structure', done: structureDone, to: '/governance-groups', src: 'auto', cta: 'Set up',
+        detail: ph ? `Structure ${ph.phase2.progress}% complete` : 'Create governance groups' },
+      { label: 'Roles & policies', done: rolesPoliciesDone, to: '/dama-roles', src: 'auto', cta: 'Set up',
+        detail: 'Assign DAMA roles & publish policies' },
       // Launch happens on this page's lifecycle bar — empty `to` scrolls there.
-      { label: 'Program launched', done: launched && structureDone && rolesPoliciesDone, to: '', src: 'auto' },
+      { label: 'Program launched', done: launched && structureDone && rolesPoliciesDone, to: '', src: 'auto', cta: 'Launch',
+        detail: 'Finish the steps above, then launch' },
     ];
 
     return [
@@ -276,6 +298,14 @@ export default function SetupHubPage() {
     });
     return out;
   }, [stages, currentIdx]);
+
+  // Lead with the current stage (HIGH) shown in full; the later-stage (NEXT)
+  // items are collapsed behind a "show more" so the list reads as "do this
+  // now" rather than a flat wall of everything outstanding.
+  const highActions = useMemo(() => nextActions.filter((a) => a.priority === 'HIGH'), [nextActions]);
+  const laterActions = useMemo(() => nextActions.filter((a) => a.priority === 'NEXT'), [nextActions]);
+  const LATER_PREVIEW = 3;
+  const shownLater = showAllLater ? laterActions : laterActions.slice(0, LATER_PREVIEW);
 
   // Sidebar ring / auto-hide track the full journey — all four stages
   // (Capture/Assign/Govern/Operate) — so the ring only fills, and the guide
@@ -463,30 +493,74 @@ export default function SetupHubPage() {
             </span>
           </div>
 
-          {/* Next Actions — the board's unchecked items, in stage order, so the
-              list always matches the board above. Each row is tagged by its
-              stage and deep-links to where the work happens. */}
-          {nextActions.length > 0 && (
-            <div style={{ marginTop: 28, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, padding: 20 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Next Actions</h3>
+          {/* Next Actions — derived from the board's unchecked items so the two
+              always agree. Current-stage items (HIGH) render in full with a
+              quantified sub-line + a verb CTA; later-stage items (NEXT) collapse
+              behind a "show more". When nothing's left, a done state stands in
+              instead of the section simply vanishing. */}
+          <div style={{ marginTop: 28, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, padding: 20 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Next Actions</h3>
+
+            {nextActions.length === 0 ? (
+              // #4 — all board items checked (and, for Operate, the program is
+              // launched). Affirm it instead of hiding the section.
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', border: '1px solid var(--color-success)', borderRadius: 'var(--radius-md)', background: 'color-mix(in srgb, var(--color-success) 8%, transparent)' }}>
+                <span style={{ fontSize: 18, color: 'var(--color-success)', flexShrink: 0 }}>✓</span>
+                <span style={{ fontSize: 13, color: 'var(--color-text)' }}>
+                  <strong>You're all set.</strong> Every setup step is complete and your governance program is live.
+                </span>
+              </div>
+            ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {nextActions.map(({ stage, item, priority }, idx) => {
+                {/* HIGH — the current stage, in full detail. */}
+                {highActions.map(({ stage, item, priority }, idx) => {
                   const pr = PRIORITY_PALETTE[priority];
                   return (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-bg)' }}>
+                    <div key={`hi-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-bg)' }}>
                       <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', background: pr.bg, color: pr.color, flexShrink: 0, minWidth: 38, textAlign: 'center' }}>{pr.label}</span>
                       <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: stage.color + '20', color: stage.color, flexShrink: 0 }}>{stage.name}</span>
-                      <span style={{ flex: 1, fontSize: 13, color: 'var(--color-text)' }}>{item.label}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
+                          {item.label}
+                          {item.src === 'auto' && (
+                            <span title="Checks off automatically as you do the underlying work" style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', padding: '1px 5px', borderRadius: 4, background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}>Auto</span>
+                          )}
+                        </span>
+                        {item.detail && <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{item.detail}</span>}
+                      </span>
                       <button
                         onClick={() => item.to ? navigate(item.to) : window.scrollTo({ top: 0, behavior: 'smooth' })}
-                        style={{ background: 'none', border: 'none', fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0, padding: 0 }}
-                      >Go &rarr;</button>
+                        style={{ background: 'none', border: 'none', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0, padding: 0, whiteSpace: 'nowrap' }}
+                      >{item.cta || 'Go'} &rarr;</button>
                     </div>
                   );
                 })}
+
+                {/* NEXT — later stages, compact and collapsed by default. */}
+                {laterActions.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', marginTop: 8, marginBottom: 2 }}>Coming up</div>
+                    {shownLater.map(({ stage, item }, idx) => (
+                      <div key={`lt-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: stage.color + '20', color: stage.color, flexShrink: 0 }}>{stage.name}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--color-text-secondary)' }}>{item.label}</span>
+                        <button
+                          onClick={() => item.to ? navigate(item.to) : window.scrollTo({ top: 0, behavior: 'smooth' })}
+                          style={{ background: 'none', border: 'none', fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0, padding: 0, whiteSpace: 'nowrap' }}
+                        >{item.cta || 'Go'} &rarr;</button>
+                      </div>
+                    ))}
+                    {laterActions.length > LATER_PREVIEW && (
+                      <button
+                        onClick={() => setShowAllLater((v) => !v)}
+                        style={{ alignSelf: 'flex-start', background: 'none', border: 'none', fontSize: 12, fontWeight: 500, color: 'var(--color-text-muted)', cursor: 'pointer', padding: '4px 0' }}
+                      >{showAllLater ? 'Show less' : `Show ${laterActions.length - LATER_PREVIEW} more`}</button>
+                    )}
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
 
