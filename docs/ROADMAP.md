@@ -10,10 +10,10 @@ exports, and org visualization all ship today. The Postgres cutover and
 the GA tightening audit (§A–§G) are merged; the deploy path is wired and
 verified (see [`PILOT_GO_LIVE_WORKSHEET.md`](./PILOT_GO_LIVE_WORKSHEET.md)).
 
-So this roadmap is **not** about filling core gaps. It is the four
-frontiers a feature-complete platform hasn't crossed because it has never
-been run in production against a real customer. Sequencing across Tracks
-A/B/C is a **go-to-market decision** (Phase-3-differentiator vs.
+So this roadmap is **not** about filling core gaps. It is the frontiers a
+feature-complete platform hasn't crossed because it has never been run in
+production against a real customer. Sequencing across Tracks A/B/C is a
+**go-to-market decision** (Phase-3-differentiator vs.
 run-real-customers-safely vs. self-serve-SaaS) and is intentionally left
 open here — this doc captures scope, not order.
 
@@ -131,6 +131,55 @@ by a business key with per-partition stewardship. Reviewed and cut as too
 specialized for the complexity it adds; revisit only if multiple customers
 ask for it.)*
 
+## Track E — non-relational source discovery
+
+*Broaden Discover beyond relational databases. Track A closed the loop
+(real scan → measured DQ → reconcile into the catalog) for the four SQL
+engines. Everything **non**-relational is only partly there: the connection
+catalog already exposes object storage (S3 · Azure Blob · GCS · SFTP),
+NoSQL (MongoDB), cloud warehouses (Snowflake · BigQuery · Redshift ·
+Databricks), APIs, and spreadsheets as first-class categories — with
+reachability probes — but their discovery returns **hardcoded sample assets
+flagged `simulated: true`**, not real introspection. The one real
+non-relational path today is a **manual local-file upload** (CSV/TSV/JSON/
+JSONL/NDJSON), which is genuinely parsed. This track turns the mocked
+categories into real discovery, reusing the same discovery → DQ → reconcile
+plumbing rather than a parallel pipeline. Each item is independent and
+customer-gated — build the source a real pilot actually has.*
+**Size: large. Sequence E2 (smallest) → E1/E3 by customer need.**
+
+- **E1 — Object storage + file schema inference.** Real discovery for
+  S3 / Azure Blob / GCS / SFTP: list a bucket/prefix, then infer schema from
+  the objects themselves — Parquet and Avro (self-describing) plus the
+  CSV/JSON family the local-file connector already parses. Extends
+  `local-file-connector.ts` from local paths to remote objects and adds a
+  listing step ahead of it; assets flow through the existing
+  `discoverAssets` → reconciliation path as real (`simulated: false`)
+  rows. *Fit: extends the one real non-relational path to cloud stores.
+  Effort: large (object-store SDK auth + columnar readers).*
+- **E2 — MongoDB / document-store discovery.** Wire the connection type that
+  is **already modelled but deliberately rejected** (`resolveDbSource`
+  throws on `MONGODB` today): sample N documents per collection, infer a
+  field/type schema — union keys, detect nested objects and arrays — and
+  surface each collection as an asset. The connection profile, default port,
+  and rejection error already exist, so this is the closest to flipping an
+  existing switch. *Fit: activates a pre-modelled source. Effort: medium.*
+- **E3 — Cloud warehouse discovery.** Replace the mock Snowflake/BigQuery/
+  Redshift/Databricks discovery with real metadata reads (`INFORMATION_SCHEMA`
+  or each engine's catalog API), slotting new drivers into the existing
+  `db-source` dispatch alongside the four SQL engines. Measured DQ via SQL
+  pushdown then comes largely for free through the same path. *Fit: new
+  drivers on a proven interface. Effort: medium–large per engine.*
+- **E4 — Deep semi-structured parsing (cross-cutting).** Today's JSON reader
+  unions **top-level keys only** and stringifies nested objects/arrays. Flatten
+  nested structures into dotted/indexed paths so a document's real shape is
+  catalogued. Small on its own and a prerequisite for E1 (JSON/Parquet nesting)
+  and E2 (Mongo sub-documents). *Fit: deepens existing parsing. Effort: small.*
+
+*Acceptance bar for E1–E3: discovered assets are real (`simulated: false`),
+flow through reconciliation, and either get a real measured-DQ path or are
+explicitly marked N/A — no mock rows reaching the governed catalog.*
+
 ---
 
 ## Snapshot
@@ -141,6 +190,7 @@ ask for it.)*
 | **B** | Production-scale hardening | Medium | A running deploy (task #3) |
 | **C** | Commercial SaaS readiness | Large / Med / Small | Go-to-market = self-serve SaaS |
 | **D** | Canonical data-model gaps (EDM review) | Large (D2) / Small–Med | Nothing; incremental anytime |
+| **E** | Non-relational source discovery — object storage, NoSQL, warehouses | Large | A pilot customer with that source type |
 
 **Not yet decided:** which track leads. That is a go-to-market call, not a
 technical one — capture the decision here when it's made and sequence the
