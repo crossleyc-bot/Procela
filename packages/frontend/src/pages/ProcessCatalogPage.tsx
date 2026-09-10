@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { apiClient } from '../api/client';
+import { apiClient, ApiError } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
@@ -745,7 +745,13 @@ export default function ProcessCatalogPage() {
       else if (target.kind === 'attachment') body.attachmentId = target.id;
       await apiClient.post('/mappings', body);
       fetchData();
-    } catch { /* */ }
+    } catch (err) {
+      // Surface the failure instead of swallowing it — a silent catch here
+      // is why a rejected /mappings POST looked like "I added it but nothing
+      // happened." Show the server's message when it sent one.
+      const message = err instanceof ApiError && err.message ? err.message : 'Failed to add link';
+      addToast('error', message);
+    }
   };
 
   // Entry point used by IOPanel. Runs the cross-division guard

@@ -5,6 +5,8 @@ import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { effectiveHealthScore } from '../lib/asset-health';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
+import { asyncHandler } from '../middleware/asyncHandler';
+import type { AuthenticatedRequest } from '../middleware/auth';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { people } from './people';
@@ -78,6 +80,23 @@ const attachmentsRepo = () => (_attachmentsRepo ??= getAttachmentsRepository(att
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The mappings.createdBy column is a Postgres `uuid`. Persist the
+// authenticated user's id when it's a real uuid, otherwise '' — the
+// repository maps a falsy value to NULL. Writing a non-uuid literal
+// (the old 'dev-user' sentinel) makes the Postgres INSERT reject with
+// "invalid input syntax for type uuid". On an un-wrapped async handler
+// that rejection is swallowed by the global unhandledRejection safety
+// net and the response is never sent, so the request hangs until the
+// gateway times out (504). Both halves are fixed here: a valid actor
+// id, and asyncHandler wrapping so any future write rejection returns a
+// clean 500 instead of hanging.
+function actorId(req: Request): string {
+  const sub = (req as AuthenticatedRequest).user?.sub;
+  return sub && UUID_RE.test(sub) ? sub : '';
+}
 
 // ── Helpers ──
 
@@ -200,7 +219,7 @@ function enrichMapping(m: StoredMapping, ctx: EnrichContext) {
 const router = Router();
 
 /** DELETE /api/v1/mappings/all — delete all mappings. */
-router.delete('/all', async (_req: Request, res: Response) => {
+router.delete('/all', asyncHandler(async (_req: Request, res: Response) => {
   const ids = (await mappingsRepo.list()).map((m) => m.id);
   const count = ids.length;
   for (const id of ids) {
@@ -209,32 +228,32 @@ router.delete('/all', async (_req: Request, res: Response) => {
   auditService.log(DEV_ORG_ID, null, 'Mapping', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all mappings');
   res.json({ success: true, deleted: count });
-});
+}));
 
 /** GET /api/v1/mappings */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const filtered = scopeListForRequest(req, await mappingsRepo.list());
   const ctx = await buildEnrichContext();
   const enriched = filtered.map((m) => enrichMapping(m, ctx));
   res.json({ success: true, data: enriched });
-});
+}));
 
 /** GET /api/v1/mappings/by-step/:stepId */
-router.get('/by-step/:stepId', async (req: Request, res: Response) => {
+router.get('/by-step/:stepId', asyncHandler(async (req: Request, res: Response) => {
   const filtered = (await mappingsRepo.list()).filter((m) => m.processStepId === req.params.stepId);
   const ctx = await buildEnrichContext();
   res.json({ success: true, data: filtered.map((m) => enrichMapping(m, ctx)) });
-});
+}));
 
 /** GET /api/v1/mappings/by-asset/:assetId */
-router.get('/by-asset/:assetId', async (req: Request, res: Response) => {
+router.get('/by-asset/:assetId', asyncHandler(async (req: Request, res: Response) => {
   const filtered = (await mappingsRepo.list()).filter((m) => m.dataAssetId === req.params.assetId);
   const ctx = await buildEnrichContext();
   res.json({ success: true, data: filtered.map((m) => enrichMapping(m, ctx)) });
-});
+}));
 
 /** POST /api/v1/mappings */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { processStepId, dataAssetId, policyId, attachmentId, linkType, notes, aiSuggested, orgId,
     criticality, dataFormat, sla, qualityRequirement, fulfillsExpected } = req.body;
 
@@ -277,16 +296,16 @@ router.post('/', async (req: Request, res: Response) => {
     ...(qualityRequirement ? { qualityRequirement } : {}),
     ...(typeof fulfillsExpected === 'string' && fulfillsExpected.trim()
       ? { fulfillsExpected: fulfillsExpected.trim() } : {}),
-    createdBy: 'dev-user',
+    createdBy: actorId(req),
     createdAt: now,
     updatedAt: now,
   };
   await mappingsRepo.create(mapping);
   res.status(201).json({ success: true, data: enrichMapping(mapping, await buildEnrichContext()) });
-});
+}));
 
 /** PUT /api/v1/mappings/:id */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const mapping = (await mappingsRepo.list()).find((m) => m.id === req.params.id);
   if (!mapping) {
     res.status(404).json({ success: false, error: 'Mapping not found' });
@@ -321,10 +340,10 @@ router.put('/:id', async (req: Request, res: Response) => {
   mapping.updatedAt = new Date().toISOString();
   await mappingsRepo.update(mapping.id, mapping);
   res.json({ success: true, data: enrichMapping(mapping, await buildEnrichContext()) });
-});
+}));
 
 /** DELETE /api/v1/mappings/:id */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const mapping = (await mappingsRepo.list()).find((m) => m.id === req.params.id);
   if (!mapping) {
     res.status(404).json({ success: false, error: 'Mapping not found' });
@@ -333,6 +352,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
   if (!assertOrgAccess(req, res, mapping.orgId, 'Mapping not found')) return;
   await mappingsRepo.delete(mapping.id);
   res.status(204).send();
-});
+}));
 
 export default router;
