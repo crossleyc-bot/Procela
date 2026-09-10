@@ -595,17 +595,47 @@ const router = Router();
  *  null to clear. Returns { ok: true, value: id | null } where null
  *  means "clear", or { ok: false } after writing a 400. Lazy-required
  *  to avoid the process-catalog ↔ people cycle. */
+/** True when a person belongs to at least one org within the node's visible
+ *  scope (the node's org(s) plus ancestors and descendants). Cross-tenant
+ *  assignment — e.g. a sibling company's person on this node — is false. */
+function personInNodeScope(personOrgIds: string[], nodeOrgIds: string[]): boolean {
+  // Only enforce against node orgs that actually exist — a node on the dev
+  // fallback org (DEV_ORG_ID) or any unknown id has no resolvable tree, so
+  // don't block there (existence-only, as before). visibleOrgScopeIn seeds
+  // its result with the scope id even when unknown, so filter here.
+  const known = getCachedOrgList();
+  const realNodeOrgs = nodeOrgIds.filter((oid) => oid && known.some((o) => o.id === oid));
+  if (realNodeOrgs.length === 0) return true;
+
+  const scope = new Set<string>();
+  for (const oid of realNodeOrgs) {
+    const s = getVisibleOrgScope(oid);
+    if (s) for (const id of s) scope.add(id);
+  }
+  if (scope.size === 0) return true;
+  return personOrgIds.some((id) => scope.has(id));
+}
+
 async function validatePersonId(
   value: unknown,
   res: Response,
+  nodeOrgIds?: string[],
 ): Promise<{ ok: true; value: string | null } | { ok: false }> {
   if (value === '' || value === null) return { ok: true, value: null };
   if (typeof value !== 'string' || !value.trim()) {
     res.status(400).json({ success: false, error: 'personId must be a string id (or empty to clear)' });
     return { ok: false };
   }
-  if (!(await peopleRepo().get(value))) {
+  const person = await peopleRepo().get(value);
+  if (!person) {
     res.status(400).json({ success: false, error: `Unknown person id "${value}"` });
+    return { ok: false };
+  }
+  // Tenant guard: the assigned person must be within the node's org scope, so
+  // a caller with cross-org visibility (e.g. a super-admin) can't assign
+  // someone from a sibling tenant to this node.
+  if (nodeOrgIds && nodeOrgIds.length && !personInNodeScope((person as { orgIds?: string[] }).orgIds || [], nodeOrgIds)) {
+    res.status(400).json({ success: false, error: `${person.name} is not in this item's organization scope and can't be assigned to it.` });
     return { ok: false };
   }
   return { ok: true, value };
@@ -812,12 +842,22 @@ router.post('/nodes', async (req: Request, res: Response) => {
     : await validateSystemIds(systemIds, res);
   if (cleanedSystemIds === null) return;
 
+  // The org(s) this node will belong to — used to scope person assignments
+  // so an owner / responsible person can't come from a sibling tenant.
+  const createOrgIds = (orgIds && orgIds.length > 0) ? orgIds : [DEV_ORG_ID];
+
+  // Owner must resolve to a real person within the node's org scope.
+  if (ownerId !== undefined && ownerId !== null && ownerId !== '') {
+    const v = await validatePersonId(ownerId, res, createOrgIds);
+    if (!v.ok) return;
+  }
+
   // Responsible Person — only allowed at the activity / task level
   // (other levels use Owner). The picker enforces "must hold the role";
-  // the backend just verifies the id resolves to a real person.
+  // the backend verifies the id resolves to a real person in scope.
   let cleanedResponsiblePersonId: string | null | undefined = undefined;
   if (responsiblePersonId !== undefined) {
-    const v = await validatePersonId(responsiblePersonId, res);
+    const v = await validatePersonId(responsiblePersonId, res, createOrgIds);
     if (!v.ok) return;
     cleanedResponsiblePersonId = v.value;
   }
@@ -977,7 +1017,16 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (description !== undefined) node.description = description;
   if (orderIndex !== undefined) node.orderIndex = orderIndex;
   if (orgIds !== undefined) node.orgIds = orgIds;
-  if (ownerId !== undefined) node.ownerId = ownerId;
+  if (ownerId !== undefined) {
+    // Guard against assigning an owner from outside the node's org scope
+    // (e.g. a sibling tenant). node.orgIds is already the effective scope
+    // above. Empty/null clears the owner and skips the check.
+    if (ownerId !== null && ownerId !== '') {
+      const v = await validatePersonId(ownerId, res, node.orgIds);
+      if (!v.ok) return;
+    }
+    node.ownerId = ownerId;
+  }
   if (purpose !== undefined) node.purpose = purpose;
   // Business Outcome merged into Purpose: fold any incoming value into
   // purpose. The deprecated field is never written back (existing rows
@@ -990,7 +1039,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (inputsOutputs !== undefined) node.inputsOutputs = inputsOutputs;
   if (responsibleRole !== undefined) node.responsibleRole = responsibleRole;
   if (responsiblePersonId !== undefined) {
-    const v = await validatePersonId(responsiblePersonId, res);
+    const v = await validatePersonId(responsiblePersonId, res, node.orgIds);
     if (!v.ok) return;
     node.responsiblePersonId = v.value;
   }
