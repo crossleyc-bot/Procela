@@ -156,18 +156,18 @@ customer-gated — build the source a real pilot actually has.*
   `.avro` through the existing LOCAL file path (`simulated: false`). DQ on those
   formats stays simulated (their values aren't read synchronously yet).
 
-  **Remote object-listing — S3 ✅ shipped; Azure Blob / GCS / SFTP open.** An
-  `S3` file-storage connection now lists a bucket/prefix, downloads each
-  parseable object, and infers its schema with the same analyzer as the local
-  upload (`simulated: false`). It's built behind a provider-agnostic
-  `ObjectStore` interface with a testable orchestrator (`lib/object-storage/`);
-  auth uses the AWS default credential chain (an IAM role) or an explicit
-  access key/secret. The other three providers plug into the same interface —
-  each needs its own SDK (`@azure/storage-blob`, `@google-cloud/storage`, an
-  SFTP client) and can't be validated in CI without a live account, so they're
-  the remaining step. *Fit: extends the one real non-relational path to cloud
-  stores. Effort: medium per remaining provider — the interface, orchestrator,
-  and columnar readers are in place.*
+  **Remote object-listing — S3 · Azure Blob · GCS ✅ shipped; SFTP open.** An
+  `S3`, `AZURE_BLOB`, or `GCS` file-storage connection now lists a bucket/
+  prefix, downloads each parseable object, and infers its schema with the same
+  analyzer as the local upload (`simulated: false`). All three are built behind
+  one provider-agnostic `ObjectStore` interface with a shared, testable
+  orchestrator (`lib/object-storage/`); auth is per provider — S3 uses an IAM
+  role or access key/secret, Azure a storage-account key or SAS token, GCS
+  Application Default Credentials or a service-account key. **SFTP** is the one
+  remaining provider (needs an SSH/SFTP client + a host SSRF guard) and, like
+  the others, can only be validated against a live endpoint. *Fit: extends the
+  one real non-relational path to cloud stores. Effort: small — the interface,
+  orchestrator, and readers are in place; SFTP is one more adapter.*
 - **E2 — MongoDB / document-store discovery. ✅ Shipped.** Real discovery for a
   configured `MONGODB` connection: list collections, sample documents per
   collection, and infer a field/type schema — union of keys, per-field BSON

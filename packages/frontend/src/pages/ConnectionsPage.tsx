@@ -776,11 +776,26 @@ export default function ConnectionsPage({
               ), true)
             ) : (
               <>
-                {fieldRow('Bucket / Container', <input aria-label="Bucket / Container" style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
+                {fieldRow(form.config.storageType === 'AZURE_BLOB' ? 'Container' : 'Bucket / Container', <input aria-label="Bucket / Container" style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
                 {fieldRow('Path', <input aria-label="Path" style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
+
+                {/* S3 */}
                 {form.config.storageType === 'S3' && fieldRow('Region', <input aria-label="Region" style={inputStyle} value={form.config.region || ''} onChange={(e) => updateConfig('region', e.target.value)} placeholder="e.g. us-east-1" />)}
-                {fieldRow(form.config.storageType === 'S3' ? 'Access Key ID' : 'API Key / Access Key', <input aria-label={form.config.storageType === 'S3' ? 'Access Key ID' : 'API Key / Access Key'} style={inputStyle} type={form.config.storageType === 'S3' ? 'text' : 'password'} value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
-                {form.config.storageType === 'S3' && fieldRow('Secret Access Key', <input aria-label="Secret Access Key" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Secret (blank = use the instance IAM role)'} />)}
+                {form.config.storageType === 'S3' && fieldRow('Access Key ID', <input aria-label="Access Key ID" style={inputStyle} value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'blank = use the instance IAM role'} />)}
+                {form.config.storageType === 'S3' && fieldRow('Secret Access Key', <input aria-label="Secret Access Key" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'blank = use the instance IAM role'} />)}
+
+                {/* Azure Blob */}
+                {form.config.storageType === 'AZURE_BLOB' && fieldRow('Storage Account', <input aria-label="Storage Account" style={inputStyle} value={form.config.account || ''} onChange={(e) => updateConfig('account', e.target.value)} placeholder="e.g. mystorageacct" />)}
+                {form.config.storageType === 'AZURE_BLOB' && fieldRow('Account Key', <input aria-label="Account Key" style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Account key (or use SAS token below)'} />)}
+                {form.config.storageType === 'AZURE_BLOB' && fieldRow('SAS Token', <input aria-label="SAS Token" style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Alternative to the account key'} />)}
+
+                {/* GCS */}
+                {form.config.storageType === 'GCS' && fieldRow('Project ID', <input aria-label="Project ID" style={inputStyle} value={form.config.account || ''} onChange={(e) => updateConfig('account', e.target.value)} placeholder="optional — inferred from the key / ADC" />)}
+                {form.config.storageType === 'GCS' && fieldRow('Service Account JSON', <input aria-label="Service Account JSON" style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'blank = Application Default Credentials'} />)}
+
+                {/* SFTP / others — generic access key (real discovery not wired yet) */}
+                {form.config.storageType !== 'S3' && form.config.storageType !== 'AZURE_BLOB' && form.config.storageType !== 'GCS' &&
+                  fieldRow('API Key / Access Key', <input aria-label="API Key / Access Key" style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
               </>
             )}
           </>

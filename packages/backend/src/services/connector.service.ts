@@ -22,7 +22,10 @@ import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
 import { discoverMongoSchema, type MongoSourceRequest } from '../lib/db-source/mongo-introspect';
 import { discoverObjectStoreAssets } from '../lib/object-storage/discover';
+import type { ObjectStore } from '../lib/object-storage/types';
 import { createS3Store } from '../lib/object-storage/s3';
+import { createAzureBlobStore } from '../lib/object-storage/azure-blob';
+import { createGcsStore } from '../lib/object-storage/gcs';
 import { decryptCredentials } from './connection-secrets';
 import logger from '../lib/logger';
 
@@ -361,11 +364,12 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
     return await discoverLocalFile(profile);
   }
 
-  // Real discovery for an S3 bucket: list objects under the configured prefix,
-  // then infer each parseable file's schema with the same analyzer the local
-  // upload uses. Fail-loud (surface the real error) like the database path.
-  if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'S3' && profile.config.bucket) {
-    return await discoverS3(profile);
+  // Real discovery for a cloud object store (S3 / Azure Blob / GCS): list
+  // objects under the configured prefix, then infer each parseable file's schema
+  // with the same analyzer the local upload uses. Fail-loud like the DB path.
+  if (profile.connectionType === 'FILE_STORAGE' && profile.config.bucket) {
+    const objStore = objectStoreDiscovery(profile);
+    if (objStore) return await objStore;
   }
 
   // Real discovery for a configured direct-connect database: run engine-
@@ -544,31 +548,58 @@ async function testLocalFile(profile: ConnectionProfileLike): Promise<ConnectorR
   }
 }
 
-async function discoverS3(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+/** Build the object-store adapter for a cloud file-storage profile, or null when
+ *  the storage type isn't a wired cloud store (LOCAL is handled elsewhere; SFTP
+ *  is not wired yet, so it falls through to the sample assets). Credentials were
+ *  decrypted by discoverAssets: apiKey / password / token carry the per-provider
+ *  secrets. */
+function objectStoreDiscovery(profile: ConnectionProfileLike): Promise<ConnectorResult> | null {
+  const cfg = profile.config;
+  const creds = profile.credentials || {};
+  // Store construction is deferred into a factory so a config error (a missing
+  // Azure key) is caught by the runner's try/catch, not thrown synchronously.
+  let makeStore: () => ObjectStore;
+  let location: string;
+  switch (cfg.storageType) {
+    case 'S3':
+      // apiKey → access key id, password → secret; absent → AWS default chain (IAM role).
+      makeStore = () => createS3Store({ bucket: cfg.bucket!, region: cfg.region, accessKeyId: creds.apiKey, secretAccessKey: creds.password });
+      location = `s3://${cfg.bucket}`;
+      break;
+    case 'AZURE_BLOB':
+      if (!cfg.account) return null; // needs a storage account — fall back to samples
+      makeStore = () => createAzureBlobStore({ account: cfg.account!, container: cfg.bucket!, accountKey: creds.apiKey, sasToken: creds.token });
+      location = `azure://${cfg.account}/${cfg.bucket}`;
+      break;
+    case 'GCS':
+      // token → inline service-account JSON; absent → Application Default Credentials.
+      makeStore = () => createGcsStore({ bucket: cfg.bucket!, projectId: cfg.account, serviceAccountJson: creds.token });
+      location = `gs://${cfg.bucket}`;
+      break;
+    default:
+      return null;
+  }
+  return runObjectStoreDiscovery(makeStore, location, cfg.path);
+}
+
+async function runObjectStoreDiscovery(makeStore: () => ObjectStore, location: string, prefix?: string): Promise<ConnectorResult> {
   const start = Date.now();
-  const { bucket, region, path: prefix } = profile.config;
   try {
-    // credentials were decrypted by discoverAssets; apiKey → access key id,
-    // password → secret. Absent → the AWS default provider chain (IAM role).
-    const store = createS3Store({
-      bucket: bucket!,
-      region,
-      accessKeyId: profile.credentials?.apiKey,
-      secretAccessKey: profile.credentials?.password,
-    });
-    const assets = await discoverObjectStoreAssets(store, { prefix: (prefix || '').replace(/^\/+/, '') });
+    const store = makeStore();
+    const cleanPrefix = (prefix || '').replace(/^\/+/, '');
+    const assets = await discoverObjectStoreAssets(store, { prefix: cleanPrefix });
     return {
       success: true,
-      message: `Discovered ${assets.length} object${assets.length === 1 ? '' : 's'} from s3://${bucket}${prefix ? '/' + prefix.replace(/^\/+/, '') : ''}`,
+      message: `Discovered ${assets.length} object${assets.length === 1 ? '' : 's'} from ${location}${cleanPrefix ? '/' + cleanPrefix : ''}`,
       latencyMs: Date.now() - start,
       simulated: false,
       details: { tableCount: assets.length, assets },
     };
   } catch (err) {
-    logger.warn({ err, bucket }, 'Live S3 discovery failed');
+    logger.warn({ err, location }, 'Live object-storage discovery failed');
     return {
       success: false,
-      message: err instanceof Error ? err.message : 'Live S3 discovery failed',
+      message: err instanceof Error ? err.message : 'Live object-storage discovery failed',
       latencyMs: Date.now() - start,
     };
   }
