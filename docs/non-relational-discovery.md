@@ -40,8 +40,8 @@ so the UI never mistakes a mock for a live scan.
 | Local file — **Parquet** | Footer metadata (`@dsnp/parquetjs`) | ✅ real | **E1** — leaf columns as dotted paths, footer row count |
 | Local file — **Avro** | OCF header schema (`avsc`) | ✅ real | **E1** — nested records → dotted paths; nullable unions unwrap |
 | dbt manifest | `manifest.json` (models/sources/seeds) | ✅ real | registers warehouse *relations* from a file — no live DB |
-| Object storage — **S3** | List bucket/prefix → download + infer each object | ✅ real | **E1** — provider-agnostic `ObjectStore`; IAM role or explicit keys |
-| Object storage — Azure Blob / GCS / SFTP | Reachability probe + mock assets | ❌ simulated | plug into the same `ObjectStore` interface; each needs its SDK + a live account |
+| Object storage — **S3 / Azure Blob / GCS** | List bucket/prefix → download + infer each object | ✅ real | **E1** — one provider-agnostic `ObjectStore`; per-provider auth (IAM role/keys, account key/SAS, ADC/key) |
+| Object storage — SFTP | Reachability probe + mock assets | ❌ simulated | the one remaining provider on the same interface (needs an SFTP client + host guard) |
 | Warehouses — Snowflake / BigQuery / Databricks | Reachability probe + mock assets | ❌ simulated | open half of **E3** (each needs its own SDK + live account) |
 | API / Spreadsheet (SharePoint, Google Sheets) | Reachability probe + mock assets | ❌ simulated | out of Track E scope |
 
@@ -79,12 +79,11 @@ their discovery status.
 
 ## Remaining gaps
 
-1. **Cloud object-listing** (open half of E1) — **S3 is done** (lists a
-   bucket/prefix, downloads each object, runs the format-complete inference via a
-   provider-agnostic `ObjectStore`). The remaining providers — Azure Blob / GCS /
-   SFTP — plug into the same interface but each needs its own SDK
-   (`@azure/storage-blob`, `@google-cloud/storage`, an SFTP client) and a live
-   account to validate.
+1. **Cloud object-listing** (open half of E1) — **S3, Azure Blob, and GCS are
+   done** (list a bucket/prefix, download each object, run the format-complete
+   inference via a provider-agnostic `ObjectStore`). **SFTP** is the one
+   remaining provider on the same interface (needs an SSH/SFTP client + a host
+   SSRF guard) and, like the rest, can only be validated against a live endpoint.
 2. **SDK warehouses** (open half of E3) — Snowflake / BigQuery / Databricks,
    each with its own driver and connection/auth model.
 3. **Unstructured content** — no parser for text/PDF/document/image bodies; not
