@@ -41,7 +41,8 @@ so the UI never mistakes a mock for a live scan.
 | Local file — **Avro** | OCF header schema (`avsc`) | ✅ real | **E1** — nested records → dotted paths; nullable unions unwrap |
 | dbt manifest | `manifest.json` (models/sources/seeds) | ✅ real | registers warehouse *relations* from a file — no live DB |
 | Object storage — **S3 / Azure Blob / GCS / SFTP** | List bucket/prefix (or remote dir) → download + infer each object | ✅ real | **E1** — one provider-agnostic `ObjectStore`; per-provider auth (IAM role/keys, account key/SAS, ADC/key, password/private-key); SFTP runs the host SSRF guard |
-| Warehouses — Snowflake / BigQuery / Databricks | Reachability probe + mock assets | ❌ simulated | open half of **E3** (each needs its own SDK + live account) |
+| Warehouse — **Snowflake** | `INFORMATION_SCHEMA` catalog SQL via snowflake-sdk | ✅ real | **E3** — own module (account/warehouse/database model); shared `groupAssets` |
+| Warehouses — BigQuery / Databricks | Reachability probe + mock assets | ❌ simulated | remaining half of **E3** (each needs its own SDK + live account) |
 | API / Spreadsheet (SharePoint, Google Sheets) | Reachability probe + mock assets | ❌ simulated | out of Track E scope |
 
 Real paths set `simulated: false` and flow through the shared `discoverAssets`
@@ -83,8 +84,8 @@ their discovery status.
    format-complete inference via a provider-agnostic `ObjectStore`). The live
    adapters can only be validated against real endpoints; their orchestration is
    unit-tested against a fake store.
-2. **SDK warehouses** (open half of E3) — Snowflake / BigQuery / Databricks,
-   each with its own driver and connection/auth model.
+2. **SDK warehouses** (remaining half of E3) — **BigQuery / Databricks** (Redshift
+   and Snowflake are done); each needs its own driver and connection/auth model.
 3. **Unstructured content** — no parser for text/PDF/document/image bodies; not
    on the roadmap.
 4. **Parquet/Avro measured DQ** — read column values (not just schema) so rules
@@ -104,8 +105,9 @@ What changed from the original relational-only survey:
 - **E4 — Deep semi-structured parsing.** JSON/Mongo previously kept only
   top-level keys and stringified nested objects; now nested structures flatten
   into dotted leaf paths via the shared `flatten-paths` module.
-- **E3 — Redshift warehouse discovery.** Was a mock warehouse category; now real
-  discovery through the `pg` driver (Snowflake/BigQuery/Databricks still mock).
+- **E3 — Warehouse discovery.** Was a mock warehouse category; **Redshift** (via
+  the `pg` driver) and **Snowflake** (via snowflake-sdk + `INFORMATION_SCHEMA`)
+  now run real discovery (BigQuery/Databricks still mock).
 - **E1 — Parquet/Avro schema inference.** Uploading a `.parquet` / `.avro`
   previously threw "unsupported file type"; now both are parsed for their real
   schema.

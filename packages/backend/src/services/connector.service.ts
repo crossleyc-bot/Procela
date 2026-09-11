@@ -21,6 +21,7 @@ import { SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
 import { discoverMongoSchema, type MongoSourceRequest } from '../lib/db-source/mongo-introspect';
+import { discoverSnowflakeSchema, type SnowflakeSourceRequest } from '../lib/db-source/snowflake-introspect';
 import { discoverObjectStoreAssets } from '../lib/object-storage/discover';
 import type { ObjectStore } from '../lib/object-storage/types';
 import { createS3Store } from '../lib/object-storage/s3';
@@ -356,6 +357,20 @@ function toMongoSourceRequest(profile: ConnectionProfileLike): MongoSourceReques
   return { host, port, database, username: profile.credentials?.username, password: profile.credentials?.password };
 }
 
+/** Map a DATA_WAREHOUSE / SNOWFLAKE connection profile to a Snowflake discovery
+ *  request. Snowflake's connection model is account + warehouse + database (not
+ *  host:port), so it maps from the warehouse form's fields. Returns null when
+ *  the profile isn't a configured Snowflake warehouse — the caller then falls
+ *  back to the sample assets. */
+export function toSnowflakeRequest(profile: ConnectionProfileLike): SnowflakeSourceRequest | null {
+  if (profile.connectionType !== 'DATA_WAREHOUSE') return null;
+  if (String(profile.config.warehouseType || '').toUpperCase() !== 'SNOWFLAKE') return null;
+  const { account, warehouse, database, schema } = profile.config;
+  const username = profile.credentials?.username;
+  if (!account || !database || !username) return null;
+  return { account, warehouse, database, schema, username, password: profile.credentials?.password };
+}
+
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
   // Decrypt at-rest secrets just-in-time before the driver authenticates.
   profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
@@ -421,6 +436,31 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Live MongoDB discovery failed',
+        latencyMs: Date.now() - start,
+      };
+    }
+  }
+
+  // Real discovery for a configured Snowflake warehouse: run INFORMATION_SCHEMA
+  // catalog SQL through the Snowflake driver. Same fail-loud contract and same
+  // DiscoveredAsset shape as the other engines.
+  const sfReq = toSnowflakeRequest(profile);
+  if (sfReq) {
+    const start = Date.now();
+    try {
+      const assets = await discoverSnowflakeSchema(sfReq);
+      return {
+        success: true,
+        message: `Discovered ${assets.length} asset${assets.length === 1 ? '' : 's'} from ${sfReq.database}`,
+        latencyMs: Date.now() - start,
+        simulated: false,
+        details: { tableCount: assets.length, assets },
+      };
+    } catch (err) {
+      logger.warn({ err, account: sfReq.account }, 'Live Snowflake discovery failed');
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Live Snowflake discovery failed',
         latencyMs: Date.now() - start,
       };
     }
