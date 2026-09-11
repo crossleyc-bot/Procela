@@ -3,14 +3,17 @@
 // DbSourceRequest, and the driver layer turns that into a real connection
 // and a batch of source rows the sync engine upserts.
 
-/** The engines the direct-connect *row-sync* driver supports. The Connection
- *  profile also models MONGODB: it now has real schema discovery (collection
- *  listing + sampled field/type inference — see mongo-introspect.ts), but is
- *  still not wired for direct row sync, so it stays out of this union and
- *  fetchDbRows rejects it. */
-export type DbSourceType = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
+/** The engines the direct-connect driver layer supports. REDSHIFT is a cloud
+ *  data warehouse that speaks the PostgreSQL wire protocol and exposes
+ *  `information_schema`, so it reuses the `pg` driver and the Postgres SQL
+ *  dialect — only its catalog row-count query differs (svv_table_info). The
+ *  Connection profile also models MONGODB (real schema discovery via
+ *  mongo-introspect.ts) and the SDK-based warehouses SNOWFLAKE / BIGQUERY /
+ *  DATABRICKS, which need their own drivers and so stay out of this union;
+ *  fetchDbRows rejects anything not listed here. */
+export type DbSourceType = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE' | 'REDSHIFT';
 
-export const SUPPORTED_DB_SOURCE_TYPES: DbSourceType[] = ['POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE'];
+export const SUPPORTED_DB_SOURCE_TYPES: DbSourceType[] = ['POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE', 'REDSHIFT'];
 
 /** Everything a driver needs to open a connection and read one table
  *  (or run one query). Assembled by resolveDbSource() from the sync's

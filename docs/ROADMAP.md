@@ -165,12 +165,18 @@ customer-gated — build the source a real pilot actually has.*
   `DiscoveredAsset` shape as the SQL path (`simulated: false`), so it reconciles
   through the identical downstream flow. Row *sync* stays out of scope — Mongo
   is discovery-only for now. *(see `lib/db-source/mongo-introspect.ts`.)*
-- **E3 — Cloud warehouse discovery.** Replace the mock Snowflake/BigQuery/
-  Redshift/Databricks discovery with real metadata reads (`INFORMATION_SCHEMA`
-  or each engine's catalog API), slotting new drivers into the existing
-  `db-source` dispatch alongside the four SQL engines. Measured DQ via SQL
-  pushdown then comes largely for free through the same path. *Fit: new
-  drivers on a proven interface. Effort: medium–large per engine.*
+- **E3 — Cloud warehouse discovery. Redshift ✅ shipped; Snowflake / BigQuery /
+  Databricks open.** A `DATA_WAREHOUSE` connection whose warehouseType is
+  **REDSHIFT** now runs real discovery: Redshift speaks the PostgreSQL wire
+  protocol and exposes `information_schema`, so it reuses the `pg` driver and
+  the Postgres SQL dialect with **no new dependency** — only its catalog
+  row-count differs (`svv_table_info`). Reachable through the existing
+  warehouse form (account→host, warehouse→database, 5439 default). The three
+  **SDK-based** warehouses remain simulated: each needs its own driver
+  (`snowflake-sdk`, `@google-cloud/bigquery`, a Databricks SQL client) with a
+  distinct connection/auth model and can't be validated in CI without a live
+  account, so they're a separate, deliberate step. *Fit: new drivers on a
+  proven interface. Effort: medium–large per remaining engine.*
 - **E4 — Deep semi-structured parsing (cross-cutting). ✅ Shipped.** A shared
   pure flattener (`lib/flatten-paths.ts`) walks a JSON row or a Mongo document
   into dotted leaf paths — `{ address: { city } }` is catalogued as

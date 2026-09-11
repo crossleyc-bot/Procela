@@ -35,7 +35,10 @@ export async function fetchDbRows(req: DbSourceRequest): Promise<SourceRow[]> {
   });
 
   switch (req.dbType) {
-    case 'POSTGRESQL': return fetchPostgresRows(req, sql);
+    // Redshift speaks the Postgres wire protocol, so the pg driver connects to
+    // it unchanged (the caller supplies the 5439 default port).
+    case 'POSTGRESQL':
+    case 'REDSHIFT': return fetchPostgresRows(req, sql);
     case 'MYSQL': return fetchMysqlRows(req, sql);
     case 'SQLSERVER': return fetchSqlServerRows(req, sql);
     case 'ORACLE': return fetchOracleRows(req, sql);

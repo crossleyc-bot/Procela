@@ -36,7 +36,8 @@ export interface DiscoveredAsset {
  *  database name as the scope. */
 export function defaultSchema(dbType: DbSourceType, database: string): string {
   switch (dbType) {
-    case 'POSTGRESQL': return 'public';
+    case 'POSTGRESQL':
+    case 'REDSHIFT': return 'public';
     case 'SQLSERVER': return 'dbo';
     case 'MYSQL': return database;
     case 'ORACLE': return ''; // resolved to the connecting user below
@@ -66,6 +67,7 @@ export function buildTableListSql(dbType: DbSourceType, schema: string): string 
   const s = escapeLiteral(schema, dbType);
   switch (dbType) {
     case 'POSTGRESQL':
+    case 'REDSHIFT':
     case 'MYSQL':
       return `SELECT table_name, table_type FROM information_schema.tables `
         + `WHERE table_schema = '${s}' AND table_type IN ('BASE TABLE', 'VIEW') `
@@ -95,6 +97,7 @@ export function buildColumnListSql(dbType: DbSourceType, schema: string): string
   const s = escapeLiteral(schema, dbType);
   switch (dbType) {
     case 'POSTGRESQL':
+    case 'REDSHIFT':
     case 'MYSQL':
       return `SELECT table_name, column_name, data_type, ordinal_position FROM information_schema.columns `
         + `WHERE table_schema = '${s}' ORDER BY table_name, ordinal_position LIMIT ${MAX_DISCOVERED_COLUMNS}`;
@@ -125,6 +128,12 @@ export function buildRowCountSql(dbType: DbSourceType, schema: string): string {
       return `SELECT c.relname AS table_name, c.reltuples AS row_count `
         + `FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace `
         + `WHERE n.nspname = '${s}' AND c.relkind IN ('r', 'p')`;
+    case 'REDSHIFT':
+      // Redshift's pg_class.reltuples is unreliable; svv_table_info.tbl_rows is
+      // the documented approximate row estimate per table. schema/table are
+      // quoted because both are reserved words there.
+      return `SELECT "table" AS table_name, tbl_rows AS row_count `
+        + `FROM svv_table_info WHERE "schema" = '${s}'`;
     case 'MYSQL':
       // information_schema.tables.table_rows is approximate for InnoDB.
       return `SELECT table_name, table_rows AS row_count FROM information_schema.tables `

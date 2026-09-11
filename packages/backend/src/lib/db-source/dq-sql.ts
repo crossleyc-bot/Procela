@@ -42,7 +42,8 @@ function qualifiedTable(dbType: DbSourceType, name: string): string {
 /** Positional placeholder in the engine's own style. */
 function placeholder(dbType: DbSourceType, idx: number): string {
   switch (dbType) {
-    case 'POSTGRESQL': return '$' + (idx + 1);
+    case 'POSTGRESQL':
+    case 'REDSHIFT': return '$' + (idx + 1); // Redshift uses the Postgres protocol
     case 'ORACLE': return ':' + (idx + 1);
     case 'SQLSERVER': return '@p' + idx;
     case 'MYSQL': return '?';
