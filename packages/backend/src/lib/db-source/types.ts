@@ -3,9 +3,11 @@
 // DbSourceRequest, and the driver layer turns that into a real connection
 // and a batch of source rows the sync engine upserts.
 
-/** The engines the direct-connect sync driver supports. The Connection
- *  profile also models MONGODB, which is not wired for direct row sync —
- *  resolveDbSource rejects it with a clear error. */
+/** The engines the direct-connect *row-sync* driver supports. The Connection
+ *  profile also models MONGODB: it now has real schema discovery (collection
+ *  listing + sampled field/type inference — see mongo-introspect.ts), but is
+ *  still not wired for direct row sync, so it stays out of this union and
+ *  fetchDbRows rejects it. */
 export type DbSourceType = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
 
 export const SUPPORTED_DB_SOURCE_TYPES: DbSourceType[] = ['POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE'];

@@ -146,7 +146,7 @@ JSONL/NDJSON), which is genuinely parsed. This track turns the mocked
 categories into real discovery, reusing the same discovery → DQ → reconcile
 plumbing rather than a parallel pipeline. Each item is independent and
 customer-gated — build the source a real pilot actually has.*
-**Size: large. Sequence E2 (smallest) → E1/E3 by customer need.**
+**Size: large. E2 (MongoDB) shipped; sequence E1/E3 by customer need.**
 
 - **E1 — Object storage + file schema inference.** Real discovery for
   S3 / Azure Blob / GCS / SFTP: list a bucket/prefix, then infer schema from
@@ -157,13 +157,14 @@ customer-gated — build the source a real pilot actually has.*
   `discoverAssets` → reconciliation path as real (`simulated: false`)
   rows. *Fit: extends the one real non-relational path to cloud stores.
   Effort: large (object-store SDK auth + columnar readers).*
-- **E2 — MongoDB / document-store discovery.** Wire the connection type that
-  is **already modelled but deliberately rejected** (`resolveDbSource`
-  throws on `MONGODB` today): sample N documents per collection, infer a
-  field/type schema — union keys, detect nested objects and arrays — and
-  surface each collection as an asset. The connection profile, default port,
-  and rejection error already exist, so this is the closest to flipping an
-  existing switch. *Fit: activates a pre-modelled source. Effort: medium.*
+- **E2 — MongoDB / document-store discovery. ✅ Shipped.** Real discovery for a
+  configured `MONGODB` connection: list collections, sample documents per
+  collection, and infer a field/type schema — union of keys, per-field BSON
+  type, polymorphic fields collapsed to a joined descriptor (e.g. `int|string`),
+  approximate `estimatedDocumentCount` as the row count. Surfaces the same
+  `DiscoveredAsset` shape as the SQL path (`simulated: false`), so it reconciles
+  through the identical downstream flow. Row *sync* stays out of scope — Mongo
+  is discovery-only for now. *(see `lib/db-source/mongo-introspect.ts`.)*
 - **E3 — Cloud warehouse discovery.** Replace the mock Snowflake/BigQuery/
   Redshift/Databricks discovery with real metadata reads (`INFORMATION_SCHEMA`
   or each engine's catalog API), slotting new drivers into the existing
