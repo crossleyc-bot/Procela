@@ -20,6 +20,7 @@ import { analyzeLocalFile } from '../lib/local-file-connector';
 import { SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
+import { discoverMongoSchema, type MongoSourceRequest } from '../lib/db-source/mongo-introspect';
 import { decryptCredentials } from './connection-secrets';
 import logger from '../lib/logger';
 
@@ -305,6 +306,19 @@ function toDbSourceRequest(profile: ConnectionProfileLike): DbSourceRequest | nu
   return { dbType, host, port, database, schema, username, password: profile.credentials?.password };
 }
 
+/** Map a MONGODB connection profile to a Mongo discovery request. Auth is
+ *  optional (a no-auth dev instance connects with host + database alone), so
+ *  unlike the SQL mapper this doesn't require a username. Returns null when the
+ *  profile isn't a configured Mongo database — the caller then falls back to
+ *  the sample assets. */
+function toMongoSourceRequest(profile: ConnectionProfileLike): MongoSourceRequest | null {
+  if (profile.connectionType !== 'DATABASE') return null;
+  if (String(profile.config.dbType || '').toUpperCase() !== 'MONGODB') return null;
+  const { host, port, database } = profile.config;
+  if (!host || !database) return null;
+  return { host, port, database, username: profile.credentials?.username, password: profile.credentials?.password };
+}
+
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
   // Decrypt at-rest secrets just-in-time before the driver authenticates.
   profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
@@ -336,6 +350,32 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Live asset discovery failed',
+        latencyMs: Date.now() - start,
+      };
+    }
+  }
+
+  // Real discovery for a configured MongoDB: list collections and infer a
+  // field/type schema from a bounded document sample. Same fail-loud contract
+  // and same DiscoveredAsset shape as the SQL path, so a document store
+  // reconciles into the catalog through the identical downstream flow.
+  const mongoReq = toMongoSourceRequest(profile);
+  if (mongoReq) {
+    const start = Date.now();
+    try {
+      const assets = await discoverMongoSchema(mongoReq);
+      return {
+        success: true,
+        message: `Discovered ${assets.length} collection${assets.length === 1 ? '' : 's'} from ${mongoReq.database}`,
+        latencyMs: Date.now() - start,
+        simulated: false,
+        details: { tableCount: assets.length, assets },
+      };
+    } catch (err) {
+      logger.warn({ err, host: mongoReq.host }, 'Live MongoDB discovery failed');
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Live MongoDB discovery failed',
         latencyMs: Date.now() - start,
       };
     }
