@@ -9,6 +9,7 @@ import assert from 'node:assert';
 import { createS3Store } from '../lib/object-storage/s3';
 import { createAzureBlobStore } from '../lib/object-storage/azure-blob';
 import { createGcsStore } from '../lib/object-storage/gcs';
+import { createSftpStore } from '../lib/object-storage/sftp';
 
 describe('object-store adapter construction', () => {
   it('S3 requires a bucket, otherwise returns a store', () => {
@@ -30,5 +31,14 @@ describe('object-store adapter construction', () => {
     assert.throws(() => createGcsStore({ bucket: '' }), /bucket/i);
     assert.ok(createGcsStore({ bucket: 'b' }));                       // ADC
     assert.ok(createGcsStore({ bucket: 'b', serviceAccountJson: '{}' })); // explicit key
+  });
+
+  it('SFTP requires host, username, and a password or private key', () => {
+    assert.throws(() => createSftpStore({ host: '', username: 'u', password: 'p' }), /host/i);
+    assert.throws(() => createSftpStore({ host: 'h', username: '', password: 'p' }), /username/i);
+    assert.throws(() => createSftpStore({ host: 'h', username: 'u' }), /password or a private key/i);
+    const s = createSftpStore({ host: 'h', username: 'u', password: 'p' });
+    assert.strictEqual(typeof s.list, 'function');
+    assert.strictEqual(typeof s.close, 'function'); // stateful → exposes close
   });
 });

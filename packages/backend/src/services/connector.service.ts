@@ -26,6 +26,7 @@ import type { ObjectStore } from '../lib/object-storage/types';
 import { createS3Store } from '../lib/object-storage/s3';
 import { createAzureBlobStore } from '../lib/object-storage/azure-blob';
 import { createGcsStore } from '../lib/object-storage/gcs';
+import { createSftpStore } from '../lib/object-storage/sftp';
 import { decryptCredentials } from './connection-secrets';
 import logger from '../lib/logger';
 
@@ -575,6 +576,12 @@ function objectStoreDiscovery(profile: ConnectionProfileLike): Promise<Connector
       // token → inline service-account JSON; absent → Application Default Credentials.
       makeStore = () => createGcsStore({ bucket: cfg.bucket!, projectId: cfg.account, serviceAccountJson: creds.token });
       location = `gs://${cfg.bucket}`;
+      break;
+    case 'SFTP':
+      // The host is stored in the bucket field (matching the reachability test);
+      // path is the remote directory. token → PEM private key (or a password).
+      makeStore = () => createSftpStore({ host: cfg.bucket!, port: cfg.port, username: creds.username, password: creds.password, privateKey: creds.token });
+      location = `sftp://${cfg.bucket}`;
       break;
     default:
       return null;

@@ -41,24 +41,29 @@ export async function discoverObjectStoreAssets(
   const maxObjects = opts.maxObjects ?? MAX_OBJECTS_SCANNED;
   const maxBytes = opts.maxBytes ?? MAX_OBJECT_BYTES;
 
-  const listing = await store.list(opts.prefix ?? '', maxObjects);
-  const parseable = listing
-    .filter((o) => SUPPORTED.has(extensionOf(o.key)))
-    .filter((o) => o.size === undefined || o.size <= maxBytes)
-    .slice(0, maxObjects);
+  try {
+    const listing = await store.list(opts.prefix ?? '', maxObjects);
+    const parseable = listing
+      .filter((o) => SUPPORTED.has(extensionOf(o.key)))
+      .filter((o) => o.size === undefined || o.size <= maxBytes)
+      .slice(0, maxObjects);
 
-  const assets: ObjectStoreAsset[] = [];
-  for (const obj of parseable) {
-    try {
-      const buf = await store.download(obj.key);
-      if (buf.length > maxBytes) continue; // size unknown at list time, caught now
-      const { rowCount, columns } = await analyzeLocalBufferAsync(buf, obj.key);
-      assets.push({ name: obj.key, type: 'FILE', columns, rowCount });
-    } catch {
-      // Skip this object — a parse/download error on one file must not fail the
-      // scan of the others.
-      continue;
+    const assets: ObjectStoreAsset[] = [];
+    for (const obj of parseable) {
+      try {
+        const buf = await store.download(obj.key);
+        if (buf.length > maxBytes) continue; // size unknown at list time, caught now
+        const { rowCount, columns } = await analyzeLocalBufferAsync(buf, obj.key);
+        assets.push({ name: obj.key, type: 'FILE', columns, rowCount });
+      } catch {
+        // Skip this object — a parse/download error on one file must not fail the
+        // scan of the others.
+        continue;
+      }
     }
+    return assets;
+  } finally {
+    // Release a stateful connection (SFTP); a no-op for the HTTP stores.
+    await store.close?.().catch(() => { /* best-effort */ });
   }
-  return assets;
 }

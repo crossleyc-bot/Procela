@@ -148,26 +148,22 @@ plumbing rather than a parallel pipeline. Each item is independent and
 customer-gated — build the source a real pilot actually has.*
 **Size: large. E2 (MongoDB) shipped; sequence E1/E3 by customer need.**
 
-- **E1 — Object storage + file schema inference. Parquet/Avro parsing ✅
-  shipped; cloud object-listing open.** The columnar-format half is done: the
-  local-file connector now reads **Parquet** (footer metadata) and **Avro**
-  (OCF header) schemas, surfacing leaf columns as dotted paths (structs →
-  `addr.city`) and the row count, reachable today by uploading a `.parquet` /
-  `.avro` through the existing LOCAL file path (`simulated: false`). DQ on those
-  formats stays simulated (their values aren't read synchronously yet).
-
-  **Remote object-listing — S3 · Azure Blob · GCS ✅ shipped; SFTP open.** An
-  `S3`, `AZURE_BLOB`, or `GCS` file-storage connection now lists a bucket/
-  prefix, downloads each parseable object, and infers its schema with the same
-  analyzer as the local upload (`simulated: false`). All three are built behind
-  one provider-agnostic `ObjectStore` interface with a shared, testable
-  orchestrator (`lib/object-storage/`); auth is per provider — S3 uses an IAM
-  role or access key/secret, Azure a storage-account key or SAS token, GCS
-  Application Default Credentials or a service-account key. **SFTP** is the one
-  remaining provider (needs an SSH/SFTP client + a host SSRF guard) and, like
-  the others, can only be validated against a live endpoint. *Fit: extends the
-  one real non-relational path to cloud stores. Effort: small — the interface,
-  orchestrator, and readers are in place; SFTP is one more adapter.*
+- **E1 — Object storage + file schema inference. ✅ Shipped.** Both halves are
+  done. *Columnar formats:* the local-file connector reads **Parquet** (footer
+  metadata) and **Avro** (OCF header) schemas, surfacing leaf columns as dotted
+  paths (structs → `addr.city`) and the row count, reachable by uploading a
+  `.parquet` / `.avro` through the LOCAL file path (`simulated: false`); DQ on
+  those stays simulated (their values aren't read synchronously yet).
+  *Remote object-listing:* an **S3**, **Azure Blob**, **GCS**, or **SFTP**
+  file-storage connection lists a bucket/prefix (or remote directory),
+  downloads each parseable object, and infers its schema with the same analyzer
+  (`simulated: false`). All four sit behind one provider-agnostic `ObjectStore`
+  interface with a shared, testable orchestrator (`lib/object-storage/`); auth
+  is per provider (S3 IAM-role/keys, Azure account-key/SAS, GCS ADC/key, SFTP
+  password/private-key), and SFTP runs the same host SSRF guard as the DB
+  drivers. *(The live cloud/SFTP adapters are thin SDK wrappers, validated only
+  against a real endpoint; the orchestration they feed is unit-tested against a
+  fake store.)*
 - **E2 — MongoDB / document-store discovery. ✅ Shipped.** Real discovery for a
   configured `MONGODB` connection: list collections, sample documents per
   collection, and infer a field/type schema — union of keys, per-field BSON

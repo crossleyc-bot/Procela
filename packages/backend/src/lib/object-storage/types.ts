@@ -19,6 +19,9 @@ export interface ObjectStore {
   list(prefix: string, max: number): Promise<ObjectRef[]>;
   /** Download one object's full bytes. */
   download(key: string): Promise<Buffer>;
+  /** Release any held resources (an SFTP connection). Stateless HTTP stores
+   *  (S3 / Azure / GCS) omit it; the orchestrator calls it in a finally. */
+  close?(): Promise<void>;
 }
 
 /** A discovered object-storage asset — the same loose shape the local-file and
