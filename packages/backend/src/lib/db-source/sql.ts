@@ -33,7 +33,8 @@ export function clampLimit(limit?: number): number {
 function quoteIdent(dbType: DbSourceType, ident: string): string {
   // The charset is already validated, so wrapping is safe.
   switch (dbType) {
-    case 'POSTGRESQL': return `"${ident}"`;
+    case 'POSTGRESQL':
+    case 'REDSHIFT': return `"${ident}"`; // Redshift is Postgres-compatible
     case 'MYSQL': return `\`${ident}\``;
     case 'SQLSERVER': return `[${ident}]`;
     // Oracle folds unquoted identifiers to upper case; a table created as

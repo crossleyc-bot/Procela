@@ -26,6 +26,27 @@ test('defaultSchema: per-engine catalog scope', () => {
   assert.equal(defaultSchema('ORACLE', 'app'), '');   // resolved to USER
 });
 
+test('Redshift reuses the Postgres dialect for catalog SQL', () => {
+  assert.equal(defaultSchema('REDSHIFT', 'app'), 'public');
+  // Table + column lists are the Postgres information_schema form (LIMIT, not TOP).
+  const tbl = buildTableListSql('REDSHIFT', 'public');
+  assert.match(tbl, /information_schema\.tables/);
+  assert.match(tbl, /table_schema = 'public'/);
+  assert.match(tbl, new RegExp(`LIMIT ${MAX_DISCOVERED_TABLES}`));
+  assert.match(buildColumnListSql('REDSHIFT', 'public'), /information_schema\.columns/);
+  // A hostile schema name is still quote-escaped, Postgres-style (no backslash doubling).
+  assert.match(buildTableListSql('REDSHIFT', "x'; DROP TABLE users; --"), /table_schema = 'x''; DROP TABLE users; --'/);
+  assert.equal(escapeLiteral('a\\b', 'REDSHIFT'), 'a\\b');
+});
+
+test('buildRowCountSql: Redshift uses svv_table_info (not pg_class)', () => {
+  const sql = buildRowCountSql('REDSHIFT', 'public');
+  assert.match(sql, /svv_table_info/);
+  assert.match(sql, /tbl_rows/);
+  assert.match(sql, /"schema" = 'public'/);
+  assert.doesNotMatch(sql, /pg_class/);
+});
+
 test('escapeLiteral: doubles embedded single quotes (injection boundary)', () => {
   assert.equal(escapeLiteral("public"), 'public');
   assert.equal(escapeLiteral("o'brien"), "o''brien");

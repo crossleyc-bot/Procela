@@ -291,19 +291,49 @@ export async function testConnection(profile: ConnectionProfileLike): Promise<Co
   }
 }
 
-/** Map a connection profile to the driver request, when it's a database whose
- *  engine the direct-connect drivers support and it carries the host +
- *  username a real scan needs. Returns null when real discovery can't run
- *  (unsupported engine, or an unconfigured/demo connection) — the caller then
- *  falls back to the clearly-labelled sample assets. */
-function toDbSourceRequest(profile: ConnectionProfileLike): DbSourceRequest | null {
-  if (profile.connectionType !== 'DATABASE') return null;
-  const dbType = String(profile.config.dbType || '').toUpperCase() as DbSourceType;
-  if (!SUPPORTED_DB_SOURCE_TYPES.includes(dbType)) return null;
-  const { host, port, database, schema } = profile.config;
+/** Warehouse engines that resolve to a real SQL driver. Only Redshift today —
+ *  it speaks the Postgres wire protocol, so it needs no new driver. Snowflake /
+ *  BigQuery / Databricks require their own SDKs and stay simulated until wired. */
+const WAREHOUSE_DB_TYPES: Record<string, DbSourceType> = { REDSHIFT: 'REDSHIFT' };
+
+/** Per-engine default port applied when the profile didn't set one. Only
+ *  engines whose driver doesn't already default correctly need an entry
+ *  (Redshift's pg driver would otherwise assume Postgres 5432). */
+const DEFAULT_DB_PORTS: Partial<Record<DbSourceType, number>> = { REDSHIFT: 5439 };
+
+/** Map a connection profile to the driver request, when it's a database (or a
+ *  Redshift warehouse) whose engine the direct-connect drivers support and it
+ *  carries the host + username a real scan needs. Returns null when real
+ *  discovery can't run (unsupported engine, or an unconfigured/demo connection)
+ *  — the caller then falls back to the clearly-labelled sample assets. */
+export function toDbSourceRequest(profile: ConnectionProfileLike): DbSourceRequest | null {
+  const cfg = profile.config;
+  let dbType: DbSourceType;
+  let host: string | undefined;
+  let database: string | undefined;
+  if (profile.connectionType === 'DATABASE') {
+    dbType = String(cfg.dbType || '').toUpperCase() as DbSourceType;
+    if (!SUPPORTED_DB_SOURCE_TYPES.includes(dbType)) return null;
+    host = cfg.host;
+    database = cfg.database;
+  } else if (profile.connectionType === 'DATA_WAREHOUSE') {
+    const wh = WAREHOUSE_DB_TYPES[String(cfg.warehouseType || '').toUpperCase()];
+    if (!wh) return null; // an SDK-only warehouse — fall back to samples
+    dbType = wh;
+    host = cfg.host || cfg.account;        // the cluster endpoint
+    database = cfg.database || cfg.warehouse;
+  } else {
+    return null;
+  }
   const username = profile.credentials?.username;
   if (!host || !database || !username) return null;
-  return { dbType, host, port, database, schema, username, password: profile.credentials?.password };
+  return {
+    dbType, host, database,
+    port: cfg.port ?? DEFAULT_DB_PORTS[dbType],
+    schema: cfg.schema,
+    username,
+    password: profile.credentials?.password,
+  };
 }
 
 /** Map a MONGODB connection profile to a Mongo discovery request. Auth is
