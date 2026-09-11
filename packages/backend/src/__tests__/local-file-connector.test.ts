@@ -20,6 +20,10 @@ describe('analyzeLocalFile', () => {
       data: [{ id: 1 }, { id: 2 }, { id: 3 }],
     }));
     fs.writeFileSync(path.join(tmpDir, 'lines.jsonl'), '{"id":1}\n{"id":2,"name":"x"}\n');
+    fs.writeFileSync(path.join(tmpDir, 'nested.json'), JSON.stringify([
+      { id: 1, address: { city: 'Norfolk', geo: { lat: 1 } }, tags: ['a'] },
+      { id: 2, address: { city: 'Newport' } },
+    ]));
     fs.writeFileSync(path.join(tmpDir, 'empty.csv'), '');
     fs.writeFileSync(path.join(tmpDir, 'broken.json'), '{not json');
     fs.writeFileSync(path.join(tmpDir, 'nope.parquet'), 'bytes');
@@ -63,6 +67,15 @@ describe('analyzeLocalFile', () => {
     const res = analyzeLocalFile(path.join(tmpDir, 'lines.jsonl'));
     assert.strictEqual(res.rowCount, 2);
     assert.deepStrictEqual(res.columns.sort(), ['id', 'name']);
+  });
+
+  it('flattens nested JSON objects into dotted-path columns (arrays stay a leaf)', () => {
+    const res = analyzeLocalFile(path.join(tmpDir, 'nested.json'));
+    assert.strictEqual(res.rowCount, 2);
+    assert.deepStrictEqual(
+      res.columns.sort(),
+      ['address.city', 'address.geo.lat', 'id', 'tags'],
+    );
   });
 
   it('throws on empty CSV', () => {

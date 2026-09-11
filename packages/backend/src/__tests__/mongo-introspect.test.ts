@@ -75,6 +75,19 @@ describe('inferMongoAssets', () => {
     assert.strictEqual(asset.columnTypes?.b, 'null');   // only ever null → reported
   });
 
+  it('flattens nested sub-documents into dotted paths, arrays stay a leaf', () => {
+    const [asset] = inferMongoAssets([{
+      name: 'orders',
+      docs: [
+        { _id: objectId('1'), customer: { name: 'Ann', addr: { city: 'Norfolk' } }, lines: [{ sku: 'a' }] },
+        { _id: objectId('2'), customer: { name: 'Ben', addr: { city: 'Newport' } }, lines: [] },
+      ],
+    }]);
+    assert.deepStrictEqual(asset.columns, ['_id', 'customer.addr.city', 'customer.name', 'lines']);
+    assert.strictEqual(asset.columnTypes?.['customer.addr.city'], 'string');
+    assert.strictEqual(asset.columnTypes?.lines, 'array'); // array not descended
+  });
+
   it('maps a view kind to VIEW and leaves an empty sample with no fields', () => {
     const [asset] = inferMongoAssets([{ name: 'active_view', kind: 'view', docs: [] }]);
     assert.strictEqual(asset.type, 'VIEW');

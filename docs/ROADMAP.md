@@ -171,11 +171,16 @@ customer-gated — build the source a real pilot actually has.*
   `db-source` dispatch alongside the four SQL engines. Measured DQ via SQL
   pushdown then comes largely for free through the same path. *Fit: new
   drivers on a proven interface. Effort: medium–large per engine.*
-- **E4 — Deep semi-structured parsing (cross-cutting).** Today's JSON reader
-  unions **top-level keys only** and stringifies nested objects/arrays. Flatten
-  nested structures into dotted/indexed paths so a document's real shape is
-  catalogued. Small on its own and a prerequisite for E1 (JSON/Parquet nesting)
-  and E2 (Mongo sub-documents). *Fit: deepens existing parsing. Effort: small.*
+- **E4 — Deep semi-structured parsing (cross-cutting). ✅ Shipped.** A shared
+  pure flattener (`lib/flatten-paths.ts`) walks a JSON row or a Mongo document
+  into dotted leaf paths — `{ address: { city } }` is catalogued as
+  `address.city`, not one opaque `address` blob. Wired into both the local-file
+  JSON reader (discovery *and* the DQ column reader, which now resolves a dotted
+  path) and the Mongo inference (E2). Depth-bounded; BSON wrappers (ObjectId,
+  Decimal128) and `Date` are leaves. *Arrays stay a single leaf* — descending
+  into array elements would yield many values per (row, column) and break the
+  one-value-per-row contract the DQ reader relies on, so array-element
+  flattening is a deliberate future step, not part of this.
 
 *Acceptance bar for E1–E3: discovered assets are real (`simulated: false`),
 flow through reconciliation, and either get a real measured-DQ path or are

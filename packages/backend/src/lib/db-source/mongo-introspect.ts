@@ -14,6 +14,7 @@
 
 import { assertConnectableHost } from './ssrf-guard';
 import { MAX_DISCOVERED_TABLES, MAX_DISCOVERED_COLUMNS, type DiscoveredAsset } from './introspect';
+import { walkLeafPaths } from '../flatten-paths';
 
 /** Everything the Mongo driver needs to connect and sample. Auth is optional —
  *  a no-auth dev instance connects with host + database alone. */
@@ -81,22 +82,25 @@ export function mongoFieldType(value: unknown): string {
 
 /**
  * Turn sampled collections into DiscoveredAssets. Pure: the driver does the
- * sampling, this unions field names across the sample and collapses each
+ * sampling, this unions field paths across the sample and collapses each
  * field's observed types into a single descriptor ('string', or 'int|string'
  * when a field is polymorphic across documents — a genuine signal for a
- * document store). `_id`, always present, sorts first; the rest are
- * alphabetical for a stable fingerprint. Bounded by MAX_DISCOVERED_COLUMNS.
+ * document store). Nested sub-documents flatten into dotted paths
+ * (`address.city`) via walkLeafPaths, so a document's real shape is
+ * catalogued; arrays stay a single leaf. `_id`, always present, sorts first;
+ * the rest are alphabetical for a stable fingerprint. Bounded by
+ * MAX_DISCOVERED_COLUMNS.
  */
 export function inferMongoAssets(collections: MongoCollectionSample[]): DiscoveredAsset[] {
   const out: DiscoveredAsset[] = [];
   for (const coll of collections.slice(0, MAX_DISCOVERED_TABLES)) {
-    // field name → set of observed types across the sampled documents.
+    // dotted field path → set of observed types across the sampled documents.
     const types = new Map<string, Set<string>>();
     for (const doc of coll.docs) {
       if (!doc || typeof doc !== 'object') continue;
-      for (const key of Object.keys(doc)) {
-        (types.get(key) ?? types.set(key, new Set()).get(key)!).add(mongoFieldType(doc[key]));
-      }
+      walkLeafPaths(doc, (path, leaf) => {
+        (types.get(path) ?? types.set(path, new Set()).get(path)!).add(mongoFieldType(leaf));
+      });
     }
     // Stable order: _id first, then alphabetical. Cap the field list.
     const names = [...types.keys()].sort((a, b) =>

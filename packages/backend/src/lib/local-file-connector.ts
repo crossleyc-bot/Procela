@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { walkLeafPaths, resolveLeafPath } from './flatten-paths';
 
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
 const UPLOADS_ROOT = path.join(DATA_DIR, 'uploads');
@@ -132,13 +133,15 @@ function buildJsonAnalysis(rows: any[]): FileAnalysis {
   if (rows.length === 0) {
     return { rowCount: 0, columns: [] };
   }
-  // Union the keys across the first handful of objects so we don't miss
-  // columns that appear only on later rows.
+  // Union the FLATTENED leaf paths across the first handful of objects so we
+  // don't miss columns that appear only on later rows — and so a nested object
+  // (`{ address: { city } }`) is catalogued as `address.city`, not one opaque
+  // `address` blob. Arrays stay a single leaf column (see flatten-paths.ts).
   const sample = rows.slice(0, 50);
   const columnSet = new Set<string>();
   for (const row of sample) {
     if (row && typeof row === 'object' && !Array.isArray(row)) {
-      for (const k of Object.keys(row)) columnSet.add(k);
+      walkLeafPaths(row, (p) => columnSet.add(p));
     }
   }
   return { rowCount: rows.length, columns: Array.from(columnSet) };
@@ -201,7 +204,10 @@ function readJsonLinesColumn(text: string, columnName: string): Array<string | n
 
 function extractJsonValue(row: unknown, columnName: string): string | null {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
-  const v = (row as Record<string, unknown>)[columnName];
+  // Resolve a dotted leaf path (`address.city`) so a DQ rule can grade a
+  // nested column surfaced by discovery. A plain key with no dots resolves as
+  // before, so top-level columns are unaffected.
+  const v = resolveLeafPath(row, columnName);
   if (v === undefined || v === null) return null;
   return typeof v === 'string' ? v : JSON.stringify(v);
 }
