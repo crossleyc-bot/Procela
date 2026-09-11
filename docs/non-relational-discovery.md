@@ -40,7 +40,8 @@ so the UI never mistakes a mock for a live scan.
 | Local file — **Parquet** | Footer metadata (`@dsnp/parquetjs`) | ✅ real | **E1** — leaf columns as dotted paths, footer row count |
 | Local file — **Avro** | OCF header schema (`avsc`) | ✅ real | **E1** — nested records → dotted paths; nullable unions unwrap |
 | dbt manifest | `manifest.json` (models/sources/seeds) | ✅ real | registers warehouse *relations* from a file — no live DB |
-| Cloud object storage — S3 / Azure Blob / GCS / SFTP | Reachability probe + mock assets | ❌ simulated | remote *listing* is the open half of **E1** (needs object-store SDKs) |
+| Object storage — **S3** | List bucket/prefix → download + infer each object | ✅ real | **E1** — provider-agnostic `ObjectStore`; IAM role or explicit keys |
+| Object storage — Azure Blob / GCS / SFTP | Reachability probe + mock assets | ❌ simulated | plug into the same `ObjectStore` interface; each needs its SDK + a live account |
 | Warehouses — Snowflake / BigQuery / Databricks | Reachability probe + mock assets | ❌ simulated | open half of **E3** (each needs its own SDK + live account) |
 | API / Spreadsheet (SharePoint, Google Sheets) | Reachability probe + mock assets | ❌ simulated | out of Track E scope |
 
@@ -78,10 +79,12 @@ their discovery status.
 
 ## Remaining gaps
 
-1. **Cloud object-listing** (open half of E1) — list a bucket/prefix on
-   S3 / Azure Blob / GCS / SFTP, fetch each object, run the now-complete
-   Parquet/Avro/CSV/JSON inference over it. Needs the object-store SDKs
-   (`@aws-sdk/client-s3`, `@azure/storage-blob`, `@google-cloud/storage`).
+1. **Cloud object-listing** (open half of E1) — **S3 is done** (lists a
+   bucket/prefix, downloads each object, runs the format-complete inference via a
+   provider-agnostic `ObjectStore`). The remaining providers — Azure Blob / GCS /
+   SFTP — plug into the same interface but each needs its own SDK
+   (`@azure/storage-blob`, `@google-cloud/storage`, an SFTP client) and a live
+   account to validate.
 2. **SDK warehouses** (open half of E3) — Snowflake / BigQuery / Databricks,
    each with its own driver and connection/auth model.
 3. **Unstructured content** — no parser for text/PDF/document/image bodies; not
@@ -107,4 +110,7 @@ What changed from the original relational-only survey:
   discovery through the `pg` driver (Snowflake/BigQuery/Databricks still mock).
 - **E1 — Parquet/Avro schema inference.** Uploading a `.parquet` / `.avro`
   previously threw "unsupported file type"; now both are parsed for their real
-  schema (cloud object-listing remains the open half).
+  schema.
+- **E1 — S3 object-listing.** Object storage was probe-and-mock; an `S3`
+  connection now lists a bucket/prefix and infers each object's schema for real
+  (Azure Blob / GCS / SFTP still mock, behind the same `ObjectStore` interface).

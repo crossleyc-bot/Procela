@@ -89,6 +89,25 @@ export async function analyzeLocalFileAsync(absPath: string): Promise<FileAnalys
   return analyzeLocalFile(absPath);
 }
 
+/**
+ * Analyze in-memory bytes as a file of the given name — used by the
+ * object-storage connectors, which download an object into a buffer. The bytes
+ * are written to a short-lived temp file so every format (including Parquet /
+ * Avro, whose libraries read from a path) is handled by the same analyzer, then
+ * the temp file is removed.
+ */
+export async function analyzeLocalBufferAsync(buf: Buffer, fileName: string): Promise<FileAnalysis> {
+  const ext = path.extname(fileName).toLowerCase() || '.bin';
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'procela-obj-'));
+  const tmpPath = path.join(tmpDir, `obj${ext}`);
+  try {
+    fs.writeFileSync(tmpPath, buf);
+    return await analyzeLocalFileAsync(tmpPath);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
+}
+
 // ── Parquet ──
 
 /** Read column paths + row count from a Parquet file's footer metadata (no full
