@@ -18,7 +18,7 @@
  * module stays driver-free so it unit-tests without a live database.
  */
 
-import { readColumnValues } from '../lib/local-file-connector';
+import { readColumnValues, isDqExecutableFile } from '../lib/local-file-connector';
 
 export type RuleType =
   | 'NOT_NULL'
@@ -109,7 +109,10 @@ export function evaluateRule(
     subject.connectionType === 'FILE_STORAGE' &&
     subject.storageType === 'LOCAL' &&
     !!subject.localFilePath &&
-    !!subject.sourceColumn;
+    !!subject.sourceColumn &&
+    // Parquet/Avro are discoverable (schema) but their values aren't read
+    // synchronously here yet, so DQ on them stays simulated, not a hard failure.
+    isDqExecutableFile(subject.localFilePath);
 
   if (canExecuteForReal) {
     try {

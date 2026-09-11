@@ -734,7 +734,7 @@ export default function ConnectionsPage({
                       id="local-file-input"
                       aria-label="File"
                       type="file"
-                      accept=".csv,.tsv,.json,.jsonl,.ndjson,text/csv,application/json"
+                      accept=".csv,.tsv,.json,.jsonl,.ndjson,.parquet,.avro,text/csv,application/json"
                       style={{ display: 'none' }}
                       onChange={(e) => {
                         const f = e.target.files?.[0];
@@ -764,7 +764,7 @@ export default function ConnectionsPage({
                         {form.config.columns && form.config.columns.length > 0 && ` × ${form.config.columns.length} columns`}
                       </span>
                     ) : (
-                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No file selected yet. CSV, TSV, JSON, JSONL up to 50 MB.</span>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No file selected yet. CSV, TSV, JSON, JSONL, Parquet, Avro up to 50 MB.</span>
                     )}
                   </div>
                   {form.config.columns && form.config.columns.length > 0 && !pendingFile && (

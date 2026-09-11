@@ -51,9 +51,118 @@ export function analyzeLocalFile(absPath: string): FileAnalysis {
       return analyzeJsonLines(text);
     case '.json':
       return analyzeJson(text);
+    case '.parquet':
+    case '.avro':
+      // Self-describing binary formats are parsed asynchronously by their
+      // library — callers should use analyzeLocalFileAsync, which handles
+      // every format. A synchronous call can't read them.
+      throw new Error(`${ext} requires asynchronous analysis (analyzeLocalFileAsync).`);
     default:
-      throw new Error(`Unsupported file type: ${ext || '(no extension)'}. Expected .csv, .tsv, .json, .jsonl, or .ndjson.`);
+      throw new Error(`Unsupported file type: ${ext || '(no extension)'}. Expected ${SUPPORTED_EXTENSIONS.join(', ')}.`);
   }
+}
+
+/** Every uploadable/analyzable extension. Text formats parse synchronously;
+ *  Parquet/Avro need the async path. */
+export const SUPPORTED_EXTENSIONS = ['.csv', '.tsv', '.json', '.jsonl', '.ndjson', '.parquet', '.avro'] as const;
+
+/** Extensions whose values the data-quality engine can read synchronously to
+ *  execute a rule for real. Parquet/Avro are discoverable (schema) but their
+ *  values aren't read here yet, so DQ on them stays simulated rather than
+ *  throwing — see evaluateRule. */
+const DQ_EXECUTABLE_EXTENSIONS = ['.csv', '.tsv', '.json', '.jsonl', '.ndjson'];
+
+export function isDqExecutableFile(absPath: string): boolean {
+  return DQ_EXECUTABLE_EXTENSIONS.includes(path.extname(absPath).toLowerCase());
+}
+
+/**
+ * Analyze an uploaded file of any supported format — the async superset of
+ * analyzeLocalFile. Text formats (CSV/TSV/JSON/JSONL) delegate to the sync
+ * parsers; Parquet and Avro read their self-describing schema from the file's
+ * own metadata (footer / header) and report the leaf columns as dotted paths.
+ */
+export async function analyzeLocalFileAsync(absPath: string): Promise<FileAnalysis> {
+  const ext = path.extname(absPath).toLowerCase();
+  if (ext === '.parquet') return analyzeParquet(absPath);
+  if (ext === '.avro') return analyzeAvro(absPath);
+  return analyzeLocalFile(absPath);
+}
+
+// ── Parquet ──
+
+/** Read column paths + row count from a Parquet file's footer metadata (no full
+ *  scan). Nested groups (structs) surface as dotted leaf paths — `addr.city`. */
+async function analyzeParquet(absPath: string): Promise<FileAnalysis> {
+  // These libraries are CommonJS; the dynamic-import namespace exposes the API
+  // on `.default` under Node's interop (falling back to the namespace itself).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ns: any = await import('@dsnp/parquetjs');
+  const parquet = ns.default ?? ns;
+  const reader = await parquet.ParquetReader.openFile(absPath);
+  try {
+    // fieldList carries every node; leaves have isNested falsy. `path` is the
+    // segment array, so a struct's leaf reads as parent.child.
+    const fields = (reader.schema as { fieldList?: Array<{ path?: string[]; name: string; isNested?: boolean }> }).fieldList || [];
+    const columns = fields
+      .filter((f) => !f.isNested)
+      .map((f) => (Array.isArray(f.path) && f.path.length ? f.path.join('.') : f.name));
+    const rawRows = Number((reader.metadata as { num_rows?: unknown } | undefined)?.num_rows ?? NaN);
+    return { rowCount: Number.isFinite(rawRows) && rawRows >= 0 ? rawRows : 0, columns };
+  } finally {
+    await reader.close();
+  }
+}
+
+// ── Avro ──
+
+/** Read the schema (from the Object Container File header) + count records of an
+ *  Avro file. Nested records flatten into dotted leaf paths; a nullable union
+ *  unwraps to its non-null branch. */
+async function analyzeAvro(absPath: string): Promise<FileAnalysis> {
+  // avsc is CommonJS — its API lands on `.default` under the import interop.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ns: any = await import('avsc');
+  const avro = ns.default ?? ns;
+  return new Promise<FileAnalysis>((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let schemaType: any = null;
+    let rowCount = 0;
+    const decoder = avro.createFileDecoder(absPath);
+    decoder.on('metadata', (type: unknown) => { schemaType = type; });
+    decoder.on('data', () => { rowCount++; });
+    decoder.on('error', reject);
+    decoder.on('end', () => {
+      if (!schemaType) { reject(new Error('Avro file carries no schema')); return; }
+      resolve({ rowCount, columns: avroLeafPaths(schemaType) });
+    });
+  });
+}
+
+/** Flatten an Avro schema tree into dotted leaf paths. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function avroLeafPaths(type: any, prefix = ''): string[] {
+  const t = unwrapAvroUnion(type);
+  if (t && t.typeName === 'record' && Array.isArray(t.fields)) {
+    const out: string[] = [];
+    for (const f of t.fields) {
+      out.push(...avroLeafPaths(f.type, prefix ? `${prefix}.${f.name}` : f.name));
+    }
+    return out;
+  }
+  return prefix ? [prefix] : [];
+}
+
+/** A nullable union (`["null", X]`) unwraps to X so it flattens like X; a
+ *  multi-branch union is treated as a leaf (no single shape to descend). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function unwrapAvroUnion(type: any): any {
+  if (type && typeof type.typeName === 'string' && type.typeName.startsWith('union') && Array.isArray(type.types)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const branches = type.types.filter((b: any) => b?.typeName !== 'null');
+    return branches.length === 1 ? branches[0] : type;
+  }
+  return type;
 }
 
 // ── Parsers ──
