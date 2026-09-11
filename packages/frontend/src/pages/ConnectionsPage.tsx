@@ -776,8 +776,9 @@ export default function ConnectionsPage({
               ), true)
             ) : (
               <>
-                {fieldRow(form.config.storageType === 'AZURE_BLOB' ? 'Container' : 'Bucket / Container', <input aria-label="Bucket / Container" style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
-                {fieldRow('Path', <input aria-label="Path" style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
+                {fieldRow(form.config.storageType === 'AZURE_BLOB' ? 'Container' : form.config.storageType === 'SFTP' ? 'Host' : 'Bucket / Container', <input aria-label="Bucket / Container" style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder={form.config.storageType === 'SFTP' ? 'e.g. sftp.example.com' : 'e.g. my-data-bucket'} />)}
+                {form.config.storageType === 'SFTP' && fieldRow('Port', <input aria-label="Port" style={inputStyle} type="number" value={form.config.port || ''} onChange={(e) => updateConfig('port', e.target.value ? parseInt(e.target.value) : '')} placeholder="22" />)}
+                {fieldRow(form.config.storageType === 'SFTP' ? 'Remote Directory' : 'Path', <input aria-label="Path" style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
 
                 {/* S3 */}
                 {form.config.storageType === 'S3' && fieldRow('Region', <input aria-label="Region" style={inputStyle} value={form.config.region || ''} onChange={(e) => updateConfig('region', e.target.value)} placeholder="e.g. us-east-1" />)}
@@ -793,8 +794,13 @@ export default function ConnectionsPage({
                 {form.config.storageType === 'GCS' && fieldRow('Project ID', <input aria-label="Project ID" style={inputStyle} value={form.config.account || ''} onChange={(e) => updateConfig('account', e.target.value)} placeholder="optional — inferred from the key / ADC" />)}
                 {form.config.storageType === 'GCS' && fieldRow('Service Account JSON', <input aria-label="Service Account JSON" style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'blank = Application Default Credentials'} />)}
 
-                {/* SFTP / others — generic access key (real discovery not wired yet) */}
-                {form.config.storageType !== 'S3' && form.config.storageType !== 'AZURE_BLOB' && form.config.storageType !== 'GCS' &&
+                {/* SFTP */}
+                {form.config.storageType === 'SFTP' && fieldRow('Username', <input aria-label="Username" style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="SFTP username" />)}
+                {form.config.storageType === 'SFTP' && fieldRow('Password', <input aria-label="Password" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Password (or use a private key)'} />)}
+                {form.config.storageType === 'SFTP' && fieldRow('Private Key', <input aria-label="Private Key" style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'PEM private key (alternative to password)'} />)}
+
+                {/* Any other storage type — generic access key (real discovery not wired) */}
+                {form.config.storageType !== 'S3' && form.config.storageType !== 'AZURE_BLOB' && form.config.storageType !== 'GCS' && form.config.storageType !== 'SFTP' &&
                   fieldRow('API Key / Access Key', <input aria-label="API Key / Access Key" style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
               </>
             )}

@@ -85,4 +85,18 @@ describe('discoverObjectStoreAssets', () => {
     const assets = await discoverObjectStoreAssets(store);
     assert.deepStrictEqual(assets.map((a) => a.name), ['good.csv']);
   });
+
+  it('releases a stateful store via close() — on success and on failure', async () => {
+    let closed = 0;
+    const base = new FakeStore({ 'x.csv': Buffer.from('a\n1\n') });
+    const withClose = (over: Partial<ObjectStore>): ObjectStore => ({
+      list: (p, m) => base.list(p, m), download: (k) => base.download(k),
+      close: async () => { closed++; }, ...over,
+    });
+    await discoverObjectStoreAssets(withClose({}));
+    assert.strictEqual(closed, 1, 'close called after a normal scan');
+    // Even when listing throws, close still runs (finally).
+    await assert.rejects(discoverObjectStoreAssets(withClose({ list: async () => { throw new Error('boom'); } })));
+    assert.strictEqual(closed, 2, 'close called after a failed scan');
+  });
 });
