@@ -778,7 +778,9 @@ export default function ConnectionsPage({
               <>
                 {fieldRow('Bucket / Container', <input aria-label="Bucket / Container" style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
                 {fieldRow('Path', <input aria-label="Path" style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
-                {fieldRow('API Key / Access Key', <input aria-label="API Key / Access Key" style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
+                {form.config.storageType === 'S3' && fieldRow('Region', <input aria-label="Region" style={inputStyle} value={form.config.region || ''} onChange={(e) => updateConfig('region', e.target.value)} placeholder="e.g. us-east-1" />)}
+                {fieldRow(form.config.storageType === 'S3' ? 'Access Key ID' : 'API Key / Access Key', <input aria-label={form.config.storageType === 'S3' ? 'Access Key ID' : 'API Key / Access Key'} style={inputStyle} type={form.config.storageType === 'S3' ? 'text' : 'password'} value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
+                {form.config.storageType === 'S3' && fieldRow('Secret Access Key', <input aria-label="Secret Access Key" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Secret (blank = use the instance IAM role)'} />)}
               </>
             )}
           </>

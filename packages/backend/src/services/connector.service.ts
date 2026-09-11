@@ -21,6 +21,8 @@ import { SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
 import { discoverMongoSchema, type MongoSourceRequest } from '../lib/db-source/mongo-introspect';
+import { discoverObjectStoreAssets } from '../lib/object-storage/discover';
+import { createS3Store } from '../lib/object-storage/s3';
 import { decryptCredentials } from './connection-secrets';
 import logger from '../lib/logger';
 
@@ -53,6 +55,7 @@ export interface ConnectionProfileLike {
     storageType?: string;
     bucket?: string;
     path?: string;
+    region?: string;
     baseUrl?: string;
     authType?: string;
     warehouseType?: string;
@@ -358,6 +361,13 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
     return await discoverLocalFile(profile);
   }
 
+  // Real discovery for an S3 bucket: list objects under the configured prefix,
+  // then infer each parseable file's schema with the same analyzer the local
+  // upload uses. Fail-loud (surface the real error) like the database path.
+  if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'S3' && profile.config.bucket) {
+    return await discoverS3(profile);
+  }
+
   // Real discovery for a configured direct-connect database: run engine-
   // specific catalog SQL through the live driver layer. A failure (bad host,
   // auth, permissions) surfaces the real error rather than falling back to
@@ -529,6 +539,36 @@ async function testLocalFile(profile: ConnectionProfileLike): Promise<ConnectorR
     return {
       success: false,
       message: err instanceof Error ? err.message : 'Failed to read file',
+      latencyMs: Date.now() - start,
+    };
+  }
+}
+
+async function discoverS3(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  const start = Date.now();
+  const { bucket, region, path: prefix } = profile.config;
+  try {
+    // credentials were decrypted by discoverAssets; apiKey → access key id,
+    // password → secret. Absent → the AWS default provider chain (IAM role).
+    const store = createS3Store({
+      bucket: bucket!,
+      region,
+      accessKeyId: profile.credentials?.apiKey,
+      secretAccessKey: profile.credentials?.password,
+    });
+    const assets = await discoverObjectStoreAssets(store, { prefix: (prefix || '').replace(/^\/+/, '') });
+    return {
+      success: true,
+      message: `Discovered ${assets.length} object${assets.length === 1 ? '' : 's'} from s3://${bucket}${prefix ? '/' + prefix.replace(/^\/+/, '') : ''}`,
+      latencyMs: Date.now() - start,
+      simulated: false,
+      details: { tableCount: assets.length, assets },
+    };
+  } catch (err) {
+    logger.warn({ err, bucket }, 'Live S3 discovery failed');
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Live S3 discovery failed',
       latencyMs: Date.now() - start,
     };
   }

@@ -35,6 +35,7 @@ export interface ConnectionProfile {
     storageType?: 'S3' | 'AZURE_BLOB' | 'GCS' | 'SFTP' | 'LOCAL';
     bucket?: string;
     path?: string;
+    region?: string; // S3 region (object-storage discovery)
 
     // LOCAL file uploads (populated by the /upload endpoint)
     localFilePath?: string;       // absolute path on disk

@@ -154,14 +154,20 @@ customer-gated — build the source a real pilot actually has.*
   (OCF header) schemas, surfacing leaf columns as dotted paths (structs →
   `addr.city`) and the row count, reachable today by uploading a `.parquet` /
   `.avro` through the existing LOCAL file path (`simulated: false`). DQ on those
-  formats stays simulated (their values aren't read synchronously yet). The
-  remaining half is **remote object-listing** for S3 / Azure Blob / GCS / SFTP:
-  list a bucket/prefix, fetch each object, and run the (now format-complete)
-  inference over it. That needs the object-store SDKs (`@aws-sdk/client-s3`,
-  `@azure/storage-blob`, `@google-cloud/storage`) with distinct auth models and
-  can't be validated in CI without a live account, so it's a separate step.
-  *Fit: extends the one real non-relational path to cloud stores. Effort: large
-  (object-store SDK auth) — the columnar readers are now in place.*
+  formats stays simulated (their values aren't read synchronously yet).
+
+  **Remote object-listing — S3 ✅ shipped; Azure Blob / GCS / SFTP open.** An
+  `S3` file-storage connection now lists a bucket/prefix, downloads each
+  parseable object, and infers its schema with the same analyzer as the local
+  upload (`simulated: false`). It's built behind a provider-agnostic
+  `ObjectStore` interface with a testable orchestrator (`lib/object-storage/`);
+  auth uses the AWS default credential chain (an IAM role) or an explicit
+  access key/secret. The other three providers plug into the same interface —
+  each needs its own SDK (`@azure/storage-blob`, `@google-cloud/storage`, an
+  SFTP client) and can't be validated in CI without a live account, so they're
+  the remaining step. *Fit: extends the one real non-relational path to cloud
+  stores. Effort: medium per remaining provider — the interface, orchestrator,
+  and columnar readers are in place.*
 - **E2 — MongoDB / document-store discovery. ✅ Shipped.** Real discovery for a
   configured `MONGODB` connection: list collections, sample documents per
   collection, and infer a field/type schema — union of keys, per-field BSON
