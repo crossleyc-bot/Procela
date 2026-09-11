@@ -25,7 +25,8 @@ Standalone documents that don't belong in the app or the code.
 
 | File | Purpose |
 |---|---|
-| [`ROADMAP.md`](./ROADMAP.md) | Post-cutover roadmap: the four frontiers beyond the go-live tail (Phase 3 discovery loop, production-scale hardening, commercial SaaS readiness, depth on existing features), with sizing left un-sequenced pending a go-to-market call. |
+| [`ROADMAP.md`](./ROADMAP.md) | Post-cutover roadmap: the frontiers beyond the go-live tail (Phase 3 discovery loop, production-scale hardening, commercial SaaS readiness, canonical data-model gaps, and non-relational source discovery), with sizing left un-sequenced pending a go-to-market call. |
+| [`non-relational-discovery.md`](./non-relational-discovery.md) | Coverage survey of the Discover loop for semi-structured / unstructured / cloud sources — what's real vs. `simulated: true`, with a source matrix. Reflects Track E (MongoDB, Redshift, Parquet/Avro, dotted-path flattening). |
 | [`future-work.csv`](./future-work.csv) | Granular, itemized engineering backlog (feature-level tickets with priority + status). The tactical companion to the strategic tracks in `ROADMAP.md`. |
 
 ### Architecture & data model
