@@ -22,6 +22,7 @@ import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
 import { discoverMongoSchema, type MongoSourceRequest } from '../lib/db-source/mongo-introspect';
 import { discoverSnowflakeSchema, type SnowflakeSourceRequest } from '../lib/db-source/snowflake-introspect';
+import { discoverBigQuerySchema, type BigQuerySourceRequest } from '../lib/db-source/bigquery-introspect';
 import { discoverObjectStoreAssets } from '../lib/object-storage/discover';
 import type { ObjectStore } from '../lib/object-storage/types';
 import { createS3Store } from '../lib/object-storage/s3';
@@ -371,6 +372,19 @@ export function toSnowflakeRequest(profile: ConnectionProfileLike): SnowflakeSou
   return { account, warehouse, database, schema, username, password: profile.credentials?.password };
 }
 
+/** Map a DATA_WAREHOUSE / BIGQUERY connection profile to a BigQuery discovery
+ *  request. BigQuery's model is project + dataset; auth is a service-account
+ *  JSON key (from the token credential) or Application Default Credentials.
+ *  Account → project id, database → dataset. Returns null when not a configured
+ *  BigQuery warehouse. */
+export function toBigQueryRequest(profile: ConnectionProfileLike): BigQuerySourceRequest | null {
+  if (profile.connectionType !== 'DATA_WAREHOUSE') return null;
+  if (String(profile.config.warehouseType || '').toUpperCase() !== 'BIGQUERY') return null;
+  const { account, database } = profile.config;
+  if (!account || !database) return null;
+  return { projectId: account, dataset: database, serviceAccountJson: profile.credentials?.token };
+}
+
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
   // Decrypt at-rest secrets just-in-time before the driver authenticates.
   profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
@@ -461,6 +475,30 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Live Snowflake discovery failed',
+        latencyMs: Date.now() - start,
+      };
+    }
+  }
+
+  // Real discovery for a configured BigQuery dataset: run per-dataset
+  // INFORMATION_SCHEMA queries through the BigQuery client. Fail-loud.
+  const bqReq = toBigQueryRequest(profile);
+  if (bqReq) {
+    const start = Date.now();
+    try {
+      const assets = await discoverBigQuerySchema(bqReq);
+      return {
+        success: true,
+        message: `Discovered ${assets.length} asset${assets.length === 1 ? '' : 's'} from ${bqReq.projectId}.${bqReq.dataset}`,
+        latencyMs: Date.now() - start,
+        simulated: false,
+        details: { tableCount: assets.length, assets },
+      };
+    } catch (err) {
+      logger.warn({ err, project: bqReq.projectId, dataset: bqReq.dataset }, 'Live BigQuery discovery failed');
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Live BigQuery discovery failed',
         latencyMs: Date.now() - start,
       };
     }
