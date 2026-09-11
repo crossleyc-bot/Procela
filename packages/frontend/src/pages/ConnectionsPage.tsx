@@ -837,12 +837,17 @@ export default function ConnectionsPage({
                 {warehouseTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             ))}
-            {fieldRow('Account', <input aria-label="Account" style={inputStyle} value={form.config.account || ''} onChange={(e) => updateConfig('account', e.target.value)} placeholder={form.config.warehouseType === 'REDSHIFT' ? 'cluster endpoint host' : 'e.g. org-account'} />)}
-            {fieldRow('Warehouse', <input aria-label="Warehouse" style={inputStyle} value={form.config.warehouse || ''} onChange={(e) => updateConfig('warehouse', e.target.value)} placeholder="e.g. COMPUTE_WH" />)}
-            {form.config.warehouseType === 'SNOWFLAKE' && fieldRow('Database', <input aria-label="Database" style={inputStyle} value={form.config.database || ''} onChange={(e) => updateConfig('database', e.target.value)} placeholder="e.g. ANALYTICS" />)}
+            {fieldRow(form.config.warehouseType === 'BIGQUERY' ? 'Project ID' : 'Account', <input aria-label="Account" style={inputStyle} value={form.config.account || ''} onChange={(e) => updateConfig('account', e.target.value)} placeholder={form.config.warehouseType === 'REDSHIFT' ? 'cluster endpoint host' : form.config.warehouseType === 'BIGQUERY' ? 'e.g. my-gcp-project' : 'e.g. org-account'} />)}
+            {form.config.warehouseType !== 'BIGQUERY' && fieldRow('Warehouse', <input aria-label="Warehouse" style={inputStyle} value={form.config.warehouse || ''} onChange={(e) => updateConfig('warehouse', e.target.value)} placeholder="e.g. COMPUTE_WH" />)}
+            {(form.config.warehouseType === 'SNOWFLAKE' || form.config.warehouseType === 'BIGQUERY') && fieldRow(form.config.warehouseType === 'BIGQUERY' ? 'Dataset' : 'Database', <input aria-label="Database" style={inputStyle} value={form.config.database || ''} onChange={(e) => updateConfig('database', e.target.value)} placeholder={form.config.warehouseType === 'BIGQUERY' ? 'e.g. analytics' : 'e.g. ANALYTICS'} />)}
             {form.config.warehouseType === 'SNOWFLAKE' && fieldRow('Schema', <input aria-label="Schema" style={inputStyle} value={form.config.schema || ''} onChange={(e) => updateConfig('schema', e.target.value)} placeholder="optional — defaults to PUBLIC" />)}
-            {fieldRow('Username', <input aria-label="Username" style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Username" />)}
-            {fieldRow('Password', <input aria-label="Password" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Password'} />)}
+
+            {/* BigQuery: service-account JSON (or blank for ADC) */}
+            {form.config.warehouseType === 'BIGQUERY' && fieldRow('Service Account JSON', <input aria-label="Service Account JSON" style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'blank = Application Default Credentials'} />)}
+
+            {/* User/pass — not used by BigQuery (key/ADC auth) */}
+            {form.config.warehouseType !== 'BIGQUERY' && fieldRow('Username', <input aria-label="Username" style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Username" />)}
+            {form.config.warehouseType !== 'BIGQUERY' && fieldRow('Password', <input aria-label="Password" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Password'} />)}
           </>
         );
 

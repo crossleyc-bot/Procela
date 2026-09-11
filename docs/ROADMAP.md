@@ -172,20 +172,21 @@ customer-gated — build the source a real pilot actually has.*
   `DiscoveredAsset` shape as the SQL path (`simulated: false`), so it reconciles
   through the identical downstream flow. Row *sync* stays out of scope — Mongo
   is discovery-only for now. *(see `lib/db-source/mongo-introspect.ts`.)*
-- **E3 — Cloud warehouse discovery. Redshift · Snowflake ✅ shipped; BigQuery /
-  Databricks open.** A `DATA_WAREHOUSE` connection runs real discovery for two
+- **E3 — Cloud warehouse discovery. Redshift · Snowflake · BigQuery ✅ shipped;
+  Databricks open.** A `DATA_WAREHOUSE` connection runs real discovery for three
   engines now. **Redshift** speaks the PostgreSQL wire protocol and exposes
   `information_schema`, so it reuses the `pg` driver and the Postgres dialect
   with no new dependency (only its row-count differs — `svv_table_info`).
-  **Snowflake** has a distinct connection model (account + warehouse + database,
-  not host:port), so — like MongoDB — it gets its own module
-  (`lib/db-source/snowflake-introspect.ts`): `snowflake-sdk`, parameterised
-  `INFORMATION_SCHEMA` catalog SQL, and the shared `groupAssets` / `applyRowCounts`
-  grouping. Reachable through the warehouse form (account, warehouse, database,
-  schema). **BigQuery** and **Databricks** remain simulated — each needs its own
-  driver (`@google-cloud/bigquery`, a Databricks SQL client) and a live account
-  to validate. *Fit: new drivers on a proven interface. Effort: medium per
-  remaining engine.*
+  **Snowflake** and **BigQuery** each have a distinct connection model, so — like
+  MongoDB — each gets its own module (`snowflake-introspect.ts`,
+  `bigquery-introspect.ts`) running that engine's `INFORMATION_SCHEMA` catalog
+  SQL and the shared `groupAssets` / `applyRowCounts` grouping: Snowflake via
+  `snowflake-sdk` (account/warehouse/database, `?`-bound schema filter),
+  BigQuery via `@google-cloud/bigquery` (project/dataset, per-dataset
+  `INFORMATION_SCHEMA` with identifier-validated back-ticked paths, ADC or a
+  service-account key). **Databricks** is the one remaining engine — it needs a
+  Databricks SQL client and a live workspace to validate. *Fit: new drivers on a
+  proven interface. Effort: medium.*
 - **E4 — Deep semi-structured parsing (cross-cutting). ✅ Shipped.** A shared
   pure flattener (`lib/flatten-paths.ts`) walks a JSON row or a Mongo document
   into dotted leaf paths — `{ address: { city } }` is catalogued as
