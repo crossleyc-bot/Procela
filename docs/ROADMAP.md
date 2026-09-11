@@ -148,15 +148,20 @@ plumbing rather than a parallel pipeline. Each item is independent and
 customer-gated — build the source a real pilot actually has.*
 **Size: large. E2 (MongoDB) shipped; sequence E1/E3 by customer need.**
 
-- **E1 — Object storage + file schema inference.** Real discovery for
-  S3 / Azure Blob / GCS / SFTP: list a bucket/prefix, then infer schema from
-  the objects themselves — Parquet and Avro (self-describing) plus the
-  CSV/JSON family the local-file connector already parses. Extends
-  `local-file-connector.ts` from local paths to remote objects and adds a
-  listing step ahead of it; assets flow through the existing
-  `discoverAssets` → reconciliation path as real (`simulated: false`)
-  rows. *Fit: extends the one real non-relational path to cloud stores.
-  Effort: large (object-store SDK auth + columnar readers).*
+- **E1 — Object storage + file schema inference. Parquet/Avro parsing ✅
+  shipped; cloud object-listing open.** The columnar-format half is done: the
+  local-file connector now reads **Parquet** (footer metadata) and **Avro**
+  (OCF header) schemas, surfacing leaf columns as dotted paths (structs →
+  `addr.city`) and the row count, reachable today by uploading a `.parquet` /
+  `.avro` through the existing LOCAL file path (`simulated: false`). DQ on those
+  formats stays simulated (their values aren't read synchronously yet). The
+  remaining half is **remote object-listing** for S3 / Azure Blob / GCS / SFTP:
+  list a bucket/prefix, fetch each object, and run the (now format-complete)
+  inference over it. That needs the object-store SDKs (`@aws-sdk/client-s3`,
+  `@azure/storage-blob`, `@google-cloud/storage`) with distinct auth models and
+  can't be validated in CI without a live account, so it's a separate step.
+  *Fit: extends the one real non-relational path to cloud stores. Effort: large
+  (object-store SDK auth) — the columnar readers are now in place.*
 - **E2 — MongoDB / document-store discovery. ✅ Shipped.** Real discovery for a
   configured `MONGODB` connection: list collections, sample documents per
   collection, and infer a field/type schema — union of keys, per-field BSON

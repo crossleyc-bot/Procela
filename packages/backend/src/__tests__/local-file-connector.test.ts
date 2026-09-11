@@ -26,7 +26,7 @@ describe('analyzeLocalFile', () => {
     ]));
     fs.writeFileSync(path.join(tmpDir, 'empty.csv'), '');
     fs.writeFileSync(path.join(tmpDir, 'broken.json'), '{not json');
-    fs.writeFileSync(path.join(tmpDir, 'nope.parquet'), 'bytes');
+    fs.writeFileSync(path.join(tmpDir, 'nope.xml'), '<x/>');
   });
 
   after(() => {
@@ -87,6 +87,6 @@ describe('analyzeLocalFile', () => {
   });
 
   it('rejects unsupported extensions', () => {
-    assert.throws(() => analyzeLocalFile(path.join(tmpDir, 'nope.parquet')), /Unsupported file type/i);
+    assert.throws(() => analyzeLocalFile(path.join(tmpDir, 'nope.xml')), /Unsupported file type/i);
   });
 });

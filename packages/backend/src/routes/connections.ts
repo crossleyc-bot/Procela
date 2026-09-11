@@ -6,7 +6,7 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { testConnection, discoverAssets } from '../services/connector.service';
-import { analyzeLocalFile, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
+import { analyzeLocalFileAsync, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
 import logger from '../lib/logger';
 import { hasDatabase } from '../db/prisma';
 import { getConnectionsRepository } from '../db/connections.repo';
@@ -477,7 +477,7 @@ router.post(
     const start = Date.now();
     try {
       fs.writeFileSync(tmpPath, body);
-      const analysis = analyzeLocalFile(tmpPath);
+      const analysis = await analyzeLocalFileAsync(tmpPath);
       res.json({
         success: true,
         data: {
@@ -605,7 +605,7 @@ router.post(
     let columns: string[] | undefined;
     let parseError: string | undefined;
     try {
-      const analysis = analyzeLocalFile(absPath);
+      const analysis = await analyzeLocalFileAsync(absPath);
       rowCount = analysis.rowCount;
       columns = analysis.columns;
     } catch (err) {

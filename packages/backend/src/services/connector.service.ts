@@ -16,7 +16,7 @@
 
 import fs from 'fs';
 import net from 'net';
-import { analyzeLocalFile } from '../lib/local-file-connector';
+import { analyzeLocalFileAsync } from '../lib/local-file-connector';
 import { SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
@@ -280,7 +280,7 @@ export async function testConnection(profile: ConnectionProfileLike): Promise<Co
   profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
   switch (profile.connectionType) {
     case 'FILE_STORAGE':
-      if (profile.config.storageType === 'LOCAL') return testLocalFile(profile);
+      if (profile.config.storageType === 'LOCAL') return await testLocalFile(profile);
       return testCloudFileStorage(profile);
     case 'DATABASE': return testDatabase(profile);
     case 'API': return testApi(profile);
@@ -355,7 +355,7 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
   // Real discovery for LOCAL file uploads: surface the file as a single
   // asset with its parsed columns attached.
   if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'LOCAL') {
-    return discoverLocalFile(profile);
+    return await discoverLocalFile(profile);
   }
 
   // Real discovery for a configured direct-connect database: run engine-
@@ -491,7 +491,7 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
 
 // ── LOCAL file-storage helpers ────────────────────────────────────────────
 
-function testLocalFile(profile: ConnectionProfileLike): ConnectorResult {
+async function testLocalFile(profile: ConnectionProfileLike): Promise<ConnectorResult> {
   const start = Date.now();
   const config = profile.config || {};
   const { localFilePath, originalFileName } = config;
@@ -511,7 +511,7 @@ function testLocalFile(profile: ConnectionProfileLike): ConnectorResult {
   }
 
   try {
-    const { rowCount, columns } = analyzeLocalFile(localFilePath);
+    const { rowCount, columns } = await analyzeLocalFileAsync(localFilePath);
     return {
       success: true,
       message: `Read ${originalFileName || 'file'}: ${rowCount.toLocaleString()} rows × ${columns.length} column${columns.length === 1 ? '' : 's'}`,
@@ -534,7 +534,7 @@ function testLocalFile(profile: ConnectionProfileLike): ConnectorResult {
   }
 }
 
-function discoverLocalFile(profile: ConnectionProfileLike): ConnectorResult {
+async function discoverLocalFile(profile: ConnectionProfileLike): Promise<ConnectorResult> {
   const start = Date.now();
   const { localFilePath, originalFileName } = profile.config;
 
@@ -543,7 +543,7 @@ function discoverLocalFile(profile: ConnectionProfileLike): ConnectorResult {
   }
 
   try {
-    const { rowCount, columns } = analyzeLocalFile(localFilePath);
+    const { rowCount, columns } = await analyzeLocalFileAsync(localFilePath);
     const stat = fs.statSync(localFilePath);
     // The file is the asset; columns are attached as metadata so the UI can
     // show the inferred schema when the user imports it as a Data Asset.
