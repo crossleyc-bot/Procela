@@ -23,6 +23,7 @@ import { discoverDbSchema } from '../lib/db-source/introspect';
 import { discoverMongoSchema, type MongoSourceRequest } from '../lib/db-source/mongo-introspect';
 import { discoverSnowflakeSchema, type SnowflakeSourceRequest } from '../lib/db-source/snowflake-introspect';
 import { discoverBigQuerySchema, type BigQuerySourceRequest } from '../lib/db-source/bigquery-introspect';
+import { discoverDatabricksSchema, type DatabricksSourceRequest } from '../lib/db-source/databricks-introspect';
 import { discoverObjectStoreAssets } from '../lib/object-storage/discover';
 import type { ObjectStore } from '../lib/object-storage/types';
 import { createS3Store } from '../lib/object-storage/s3';
@@ -385,6 +386,19 @@ export function toBigQueryRequest(profile: ConnectionProfileLike): BigQuerySourc
   return { projectId: account, dataset: database, serviceAccountJson: profile.credentials?.token };
 }
 
+/** Map a DATA_WAREHOUSE / DATABRICKS connection profile to a Databricks
+ *  discovery request. Databricks' model is workspace host + SQL-warehouse HTTP
+ *  path + token, against a Unity Catalog catalog/schema. Account → server
+ *  hostname, warehouse → HTTP path, database → catalog. Returns null when not a
+ *  configured Databricks warehouse — the caller then falls back to samples. */
+export function toDatabricksRequest(profile: ConnectionProfileLike): DatabricksSourceRequest | null {
+  if (profile.connectionType !== 'DATA_WAREHOUSE') return null;
+  if (String(profile.config.warehouseType || '').toUpperCase() !== 'DATABRICKS') return null;
+  const { account, warehouse, database, schema } = profile.config;
+  if (!account || !warehouse || !database) return null;
+  return { host: account, httpPath: warehouse, catalog: database, schema, token: profile.credentials?.token };
+}
+
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
   // Decrypt at-rest secrets just-in-time before the driver authenticates.
   profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
@@ -499,6 +513,30 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Live BigQuery discovery failed',
+        latencyMs: Date.now() - start,
+      };
+    }
+  }
+
+  // Real discovery for a configured Databricks warehouse: run per-catalog
+  // information_schema queries through the Databricks SQL driver. Fail-loud.
+  const dbxReq = toDatabricksRequest(profile);
+  if (dbxReq) {
+    const start = Date.now();
+    try {
+      const assets = await discoverDatabricksSchema(dbxReq);
+      return {
+        success: true,
+        message: `Discovered ${assets.length} asset${assets.length === 1 ? '' : 's'} from ${dbxReq.catalog}`,
+        latencyMs: Date.now() - start,
+        simulated: false,
+        details: { tableCount: assets.length, assets },
+      };
+    } catch (err) {
+      logger.warn({ err, host: dbxReq.host, catalog: dbxReq.catalog }, 'Live Databricks discovery failed');
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Live Databricks discovery failed',
         latencyMs: Date.now() - start,
       };
     }

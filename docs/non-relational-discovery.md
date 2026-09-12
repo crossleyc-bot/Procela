@@ -23,9 +23,12 @@ so the UI never mistakes a mock for a live scan.
   **MongoDB** documents. Nested shapes flatten into dotted paths.
 - **Unstructured** — **no**. Nothing reads free-form text, PDFs, documents, or
   images.
-- **Cloud object storage / SDK warehouses / API / spreadsheets** — still
-  **probe-and-mock** (`simulated: true`); they need per-service SDKs and a live
-  account, so they're not yet real discovery.
+- **Cloud object storage** (S3 · Azure Blob · GCS · SFTP) and **SDK warehouses**
+  (Snowflake · BigQuery · Databricks) — **real** discovery (`simulated: false`).
+  Their live SDK adapters can only be validated against real endpoints, but the
+  discovery paths are built, not mocked.
+- **API / spreadsheets** — still **probe-and-mock** (`simulated: true`); out of
+  Track E scope.
 
 ---
 
@@ -41,8 +44,7 @@ so the UI never mistakes a mock for a live scan.
 | Local file — **Avro** | OCF header schema (`avsc`) | ✅ real | **E1** — nested records → dotted paths; nullable unions unwrap |
 | dbt manifest | `manifest.json` (models/sources/seeds) | ✅ real | registers warehouse *relations* from a file — no live DB |
 | Object storage — **S3 / Azure Blob / GCS / SFTP** | List bucket/prefix (or remote dir) → download + infer each object | ✅ real | **E1** — one provider-agnostic `ObjectStore`; per-provider auth (IAM role/keys, account key/SAS, ADC/key, password/private-key); SFTP runs the host SSRF guard |
-| Warehouse — **Snowflake / BigQuery** | `INFORMATION_SCHEMA` catalog SQL via the engine's SDK | ✅ real | **E3** — own module each (account/warehouse/db · project/dataset); shared `groupAssets` |
-| Warehouse — Databricks | Reachability probe + mock assets | ❌ simulated | the one remaining engine of **E3** (needs a Databricks SQL client + live workspace) |
+| Warehouse — **Snowflake / BigQuery / Databricks** | `INFORMATION_SCHEMA` catalog SQL via the engine's SDK | ✅ real | **E3** — own module each (account/warehouse/db · project/dataset · host/http-path/catalog); shared `groupAssets` |
 | API / Spreadsheet (SharePoint, Google Sheets) | Reachability probe + mock assets | ❌ simulated | out of Track E scope |
 
 Real paths set `simulated: false` and flow through the shared `discoverAssets`
@@ -84,15 +86,15 @@ their discovery status.
    format-complete inference via a provider-agnostic `ObjectStore`). The live
    adapters can only be validated against real endpoints; their orchestration is
    unit-tested against a fake store.
-2. **SDK warehouses** (remaining half of E3) — **Databricks** (Redshift,
-   Snowflake, and BigQuery are done); needs a Databricks SQL client + live workspace.
-3. **Unstructured content** — no parser for text/PDF/document/image bodies; not
+2. **Unstructured content** — no parser for text/PDF/document/image bodies; not
    on the roadmap.
-4. **Parquet/Avro measured DQ** — read column values (not just schema) so rules
+3. **Parquet/Avro measured DQ** — read column values (not just schema) so rules
    execute for real instead of simulating.
 
-Items 1–2 can't be validated in CI without live cloud accounts, which is why
-they remain deliberately deferred.
+Item 1's live adapters (cloud object stores + SFTP) and every SDK warehouse
+path can't be validated in CI without live cloud accounts, which is why their
+real-endpoint validation remains deliberately deferred; their pure pieces
+(mappers, SQL builders, injection guards, orchestration) are unit-tested.
 
 ---
 
@@ -106,8 +108,9 @@ What changed from the original relational-only survey:
   top-level keys and stringified nested objects; now nested structures flatten
   into dotted leaf paths via the shared `flatten-paths` module.
 - **E3 — Warehouse discovery.** Was a mock warehouse category; **Redshift** (`pg`
-  driver), **Snowflake** (snowflake-sdk), and **BigQuery** (@google-cloud/bigquery)
-  now run real `INFORMATION_SCHEMA` discovery (Databricks still mock).
+  driver), **Snowflake** (snowflake-sdk), **BigQuery** (@google-cloud/bigquery),
+  and **Databricks** (@databricks/sql) now run real `INFORMATION_SCHEMA`
+  discovery — the whole warehouse category is real.
 - **E1 — Parquet/Avro schema inference.** Uploading a `.parquet` / `.avro`
   previously threw "unsupported file type"; now both are parsed for their real
   schema.
