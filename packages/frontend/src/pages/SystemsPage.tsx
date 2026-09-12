@@ -31,7 +31,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
-import { clickable, activateOnKeyStop } from '../lib/a11y';
+import { activateOnKeyStop } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
@@ -986,80 +986,36 @@ export default function SystemsPage({
           rows from above. */}
       {activeOrgId && !canOwnHere && <CreateScopeNotice noun="systems" />}
 
-      {/* Two-column layout: System Types sidebar + content */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
-        {/* System Types Sidebar */}
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 10,
-          position: 'sticky',
-          top: 12,
-          maxHeight: 'calc(100vh - 180px)',
-          overflowY: 'auto',
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
-            System Types
-          </div>
-          <div
-            {...clickable(() => setFilterType(''), { pressed: !filterType })}
-            style={{
-              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-              fontWeight: !filterType ? 600 : 400,
-              background: !filterType ? 'var(--color-primary-light)' : 'transparent',
-              color: !filterType ? 'var(--color-primary)' : 'var(--color-text)',
-            }}
-            onMouseEnter={(e) => { if (filterType) e.currentTarget.style.background = 'var(--color-bg)'; }}
-            onMouseLeave={(e) => { if (filterType) e.currentTarget.style.background = 'transparent'; }}
-          >
-            All Systems ({systems.length})
-          </div>
-          {systemTypes.map((t) => {
-            const count = systems.filter((s) => s.systemType === t).length;
-            if (count === 0) return null;
-            const isActive = filterType === t;
-            return (
-              <div
-                key={t}
-                {...clickable(() => setFilterType(isActive ? '' : t), { pressed: isActive })}
-                style={{
-                  padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-                  fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
-                  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span>{t}</span>
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
-              </div>
-            );
-          })}
-          {systems.filter((s) => !s.systemType).length > 0 && (
-            <div
-              {...clickable(() => setFilterType('__none__'), { pressed: filterType === '__none__' })}
-              style={{
-                padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-                fontWeight: filterType === '__none__' ? 600 : 400,
-                background: filterType === '__none__' ? 'var(--color-primary-light)' : 'transparent',
-                color: filterType === '__none__' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                fontStyle: 'italic',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}
-              onMouseEnter={(e) => { if (filterType !== '__none__') e.currentTarget.style.background = 'var(--color-bg)'; }}
-              onMouseLeave={(e) => { if (filterType !== '__none__') e.currentTarget.style.background = 'transparent'; }}
-            >
-              <span>Untyped</span>
-              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{systems.filter((s) => !s.systemType).length}</span>
-            </div>
-          )}
-        </div>
+      {/* Full-width content — System Types is now a top facet (was a left-rail tree) */}
+      <div>
 
         {/* Content Area */}
         <div>
+          {/* System Types chips (was a left-rail tree; now a top facet) */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {([
+              { key: '', label: 'All', count: systems.length },
+              ...systemTypes.map((t) => ({ key: t, label: t, count: systems.filter((s) => s.systemType === t).length })),
+              { key: '__none__', label: 'Untyped', count: systems.filter((s) => !s.systemType).length },
+            ]).filter((o) => o.key === '' || o.count > 0).map((o) => {
+              const active = filterType === o.key;
+              return (
+                <button
+                  key={o.key || 'all'}
+                  onClick={() => setFilterType(o.key)}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                </button>
+              );
+            })}
+          </div>
           {/* Filters (left-aligned, mirrors Data Assets) */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <input

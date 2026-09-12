@@ -1509,88 +1509,45 @@ export default function DataAssetsPage({
           read inherited rows from above. */}
       {activeOrgId && !canOwnHere && <CreateScopeNotice noun="data assets" />}
 
-      {/* Two-column layout: Categories sidebar + content (mirrors Systems page) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
-        {/* Categories Sidebar */}
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 10,
-          position: 'sticky',
-          top: 12,
-          maxHeight: 'calc(100vh - 180px)',
-          overflowY: 'auto',
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
-            Data Classification
-          </div>
-          <div
-            {...clickable(() => setFilterCategory(''), { pressed: !filterCategory })}
-            style={{
-              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-              fontWeight: !filterCategory ? 600 : 400,
-              background: !filterCategory ? 'var(--color-primary-light)' : 'transparent',
-              color: !filterCategory ? 'var(--color-primary)' : 'var(--color-text)',
-            }}
-            onMouseEnter={(e) => { if (filterCategory) e.currentTarget.style.background = 'var(--color-bg)'; }}
-            onMouseLeave={(e) => { if (filterCategory) e.currentTarget.style.background = 'transparent'; }}
-          >
-            All Assets ({assets.length})
-          </div>
-          {[
-            { key: 'MASTER', label: 'Master' },
-            { key: 'REFERENCE', label: 'Reference' },
-            { key: 'TRANSACTIONAL', label: 'Transactional' },
-            { key: 'ANALYTICAL', label: 'Analytical' },
-            { key: 'METADATA', label: 'Metadata' },
-          ].map(({ key, label }) => {
-            const count = assets.filter((a) => a.dataType === key).length;
-            if (count === 0) return null;
-            const isActive = filterCategory === key;
-            return (
-              <div
-                key={key}
-                {...clickable(() => setFilterCategory(isActive ? '' : key), { pressed: isActive })}
-                style={{
-                  padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-                  fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
-                  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span>{label}</span>
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
-              </div>
-            );
-          })}
-          {assets.filter((a) => !a.dataType).length > 0 && (
-            <div
-              {...clickable(() => setFilterCategory(filterCategory === '__none__' ? '' : '__none__'), { pressed: filterCategory === '__none__' })}
-              style={{
-                padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-                fontWeight: filterCategory === '__none__' ? 600 : 400,
-                background: filterCategory === '__none__' ? 'var(--color-primary-light)' : 'transparent',
-                color: filterCategory === '__none__' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                fontStyle: 'italic',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}
-              onMouseEnter={(e) => { if (filterCategory !== '__none__') e.currentTarget.style.background = 'var(--color-bg)'; }}
-              onMouseLeave={(e) => { if (filterCategory !== '__none__') e.currentTarget.style.background = 'transparent'; }}
-            >
-              <span>Untyped</span>
-              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{assets.filter((a) => !a.dataType).length}</span>
-            </div>
-          )}
-        </div>
+      {/* Full-width content — Data Classification is now a facet in the top Filters row */}
+      <div>
 
         {/* Content area */}
         <div>
+      {/* Data Classification chips (was a left-rail tree; now a top facet like Origin) */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Classification</span>
+        {([
+          { key: '', label: 'All', count: assets.length, hint: 'Every classification' },
+          { key: 'MASTER', label: 'Master', count: assets.filter((a) => a.dataType === 'MASTER').length, hint: 'Master data' },
+          { key: 'REFERENCE', label: 'Reference', count: assets.filter((a) => a.dataType === 'REFERENCE').length, hint: 'Reference data' },
+          { key: 'TRANSACTIONAL', label: 'Transactional', count: assets.filter((a) => a.dataType === 'TRANSACTIONAL').length, hint: 'Transactional data' },
+          { key: 'ANALYTICAL', label: 'Analytical', count: assets.filter((a) => a.dataType === 'ANALYTICAL').length, hint: 'Analytical data' },
+          { key: 'METADATA', label: 'Metadata', count: assets.filter((a) => a.dataType === 'METADATA').length, hint: 'Metadata' },
+          { key: '__none__', label: 'Untyped', count: assets.filter((a) => !a.dataType).length, hint: 'No classification set' },
+        ] as const).filter((o) => o.key === '' || o.count > 0).map((o) => {
+          const active = filterCategory === o.key;
+          return (
+            <button
+              key={o.key || 'all'}
+              onClick={() => setFilterCategory(o.key)}
+              title={o.hint}
+              style={{
+                padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                cursor: 'pointer',
+              }}
+            >
+              {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+            </button>
+          );
+        })}
+      </div>
       {/* Origin chips — separate governance/discovered/synced rows from manual entries */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Origin</span>
         {([
           { key: '', label: 'All', count: assets.length, hint: 'Show every data asset' },
           { key: 'MANUAL', label: 'Manual', count: assets.filter((a) => (a.origin || 'MANUAL') === 'MANUAL').length, hint: 'Typed by a user' },
