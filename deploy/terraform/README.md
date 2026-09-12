@@ -150,7 +150,7 @@ a small bootstrap module or by hand.
 ## Production hardening toggles
 
 The production-hardening items from
-[`docs/AWS_PRODUCTION_GUIDE.md` §5](../../docs/AWS_PRODUCTION_GUIDE.md)
+[`docs/STATUS.md` § Production hardening](../../docs/STATUS.md#production-hardening)
 are implemented here as variables, and the stack-level ones now **default
 `true`** so a bare apply is production-hardened. To get the small/cheap
 reference stack instead, set the cost-bearing ones `false` (there's a

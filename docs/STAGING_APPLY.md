@@ -17,7 +17,7 @@ run them; follow the links for detail.
 - `terraform` ≥ 1.6, `aws` CLI configured for the staging account, `gh` CLI
   (for the deploy-pipeline variables), Docker (for the first image push).
 - Two ACM certs: one in `var.region` for the ALB, one in **us-east-1** for
-  CloudFront (`docs/AWS_PRODUCTION_GUIDE.md` Phase 0).
+  CloudFront (`docs/STATUS.md` § Production hardening; `deploy/terraform/README.md`).
 
 ## 1. Remote state (recommended even for staging)
 

@@ -285,9 +285,9 @@ from a fresh org — but the hub makes it obvious what's still missing.
 The Help button lives in the **top bar next to Ask AI**, not in
 the sidebar. Clicking it opens the guide in a popup window so
 you keep whatever page you were on. The Training Guide follows
-the same pattern, and a **Product roadmap ↗** button on the Help
-guide's header opens the live product roadmap — rendered from
-`docs/ROADMAP.md`, the single source of truth. Direct-URL deep
+the same pattern, and a **Status & roadmap ↗** button on the Help
+guide's header opens the live status & roadmap doc — rendered from
+`docs/STATUS.md`, the single source of truth. Direct-URL deep
 links (like `/help#connectors` and `/roadmap`) still resolve.
 
 ---

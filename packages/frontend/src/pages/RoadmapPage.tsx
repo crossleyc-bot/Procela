@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import Page from '../components/Page';
 
-// The product roadmap has a single source of truth: the markdown at
-// docs/ROADMAP.md (repo root), rendered server-side at
+// The status / roadmap view has a single source of truth: the markdown at
+// docs/STATUS.md (repo root), rendered server-side at
 // /api/v1/docs/roadmap.html — the same file engineering edits directly.
 // This page embeds that one rendered document (rather than maintaining a
 // second, drifting hand-written copy), exactly the way /help embeds the
 // help guide. Edit the markdown and this view follows on the next load.
 // Deep links like /roadmap#track-a are forwarded into the embedded
 // document's own heading anchors (the markdown renderer slugifies every
-// heading).
+// heading). The endpoint path stays /roadmap.html for saved deep links.
 const ROADMAP_DOC_URL = '/api/v1/docs/roadmap.html';
 
 export default function RoadmapPage() {
@@ -35,8 +35,8 @@ export default function RoadmapPage() {
   return (
     <Page width="default">
       <PageHeader
-        title="Product Roadmap"
-        subtitle="The post-cutover roadmap, rendered live from docs/ROADMAP.md — the single source of truth."
+        title="Status & Roadmap"
+        subtitle="Status, roadmap and open work — rendered live from docs/STATUS.md, the single source of truth."
       />
       <iframe
         ref={frameRef}

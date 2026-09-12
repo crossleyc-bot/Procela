@@ -14,7 +14,7 @@ Related docs — do not duplicate them here:
 
 - **Rotating** an already-live secret → [`DR_RUNBOOK.md`](./DR_RUNBOOK.md) §3.
 - **Restore / DR / migration roll-back** → [`DR_RUNBOOK.md`](./DR_RUNBOOK.md).
-- The full readiness checklist → [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md).
+- The full readiness checklist → [`STATUS.md` § Go-live checklist](./STATUS.md#go-live-checklist).
 - Terraform specifics → [`deploy/terraform/README.md`](../deploy/terraform/README.md).
 - Helm specifics → [`deploy/helm/procela/README.md`](../deploy/helm/procela/README.md).
 
@@ -300,7 +300,7 @@ curl -s -X POST "$API/api/v1/auth/encrypt-secret" \
 
 ## 6. Per-environment secret checklist
 
-Maps to the GO_LIVE_CHECKLIST **fast path** (#6, 7, 9, 10; plus 8, 11, 12).
+Maps to the STATUS.md go-live **fast path** (#6, 7, 9, 10; plus 8, 11, 12).
 
 | # | Item | dev | staging | prod |
 |---|---|:--:|:--:|:--:|

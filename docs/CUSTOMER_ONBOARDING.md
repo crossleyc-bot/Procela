@@ -5,7 +5,7 @@ their own IdP, no demo data) onto a Procela deployment. It picks up where the
 infrastructure guides leave off:
 
 - **Infrastructure** (VPC, RDS, ECS, ALB, CloudFront, Secrets Manager, the
-  production hardening toggles): `docs/AWS_PRODUCTION_GUIDE.md` + `deploy/terraform/`.
+  production hardening toggles): `docs/STATUS.md` (§ Production hardening) + `deploy/terraform/`.
 - **Deploy mechanics** (build/push image, cut over): `docs/DEPLOY_RUNBOOK.md`.
 
 Everything below is the **tenant** layer: schema, the first Super Admin, the
@@ -146,5 +146,5 @@ Two paths (see `docs/` + `packages/connector/README.md`):
 ## Known non-goals (as of this release)
 
 No billing subsystem; placeholder legal copy; external pen-test and DR rehearsal
-are operator responsibilities. See `docs/AWS_PRODUCTION_GUIDE.md` and
-`docs/GA_TIGHTENING_AUDIT.md` for the full posture.
+are operator responsibilities. See `docs/STATUS.md` (§ Production hardening,
+§ Deferred / out-of-scope, and § GA tightening audit) for the full posture.
