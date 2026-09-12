@@ -674,33 +674,40 @@ export default function BusinessGlossaryPage() {
 
         {/* Content area */}
         <div>
-          {/* Category chips (was a left-rail tree; now a top facet) */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {([
+          {/* Category chips — only rendered when the facet actually splits the
+              list (≥2 populated categories), to save vertical space. */}
+          {(() => {
+            const chips = [
               { key: '', label: 'All', count: terms.length },
               ...CATEGORY_ORDER.map((cat) => ({ key: cat, label: cat, count: terms.filter((t) => t.category === cat).length })),
-            ]).filter((o) => o.key === '' || o.count > 0).map((o) => {
-              const active = filterCategory === o.key;
-              const dot = o.key ? (CATEGORY_COLORS[o.key]?.color || '#64748b') : null;
-              return (
-                <button
-                  key={o.key || 'all'}
-                  onClick={() => setFilterCategory(o.key)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {dot && <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: dot }} />}
-                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-                </button>
-              );
-            })}
-          </div>
+            ].filter((o) => o.key === '' || o.count > 0);
+            if (chips.filter((o) => o.key !== '').length < 2) return null;
+            return (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                {chips.map((o) => {
+                  const active = filterCategory === o.key;
+                  const dot = o.key ? (CATEGORY_COLORS[o.key]?.color || '#64748b') : null;
+                  return (
+                    <button
+                      key={o.key || 'all'}
+                      onClick={() => setFilterCategory(o.key)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                        color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {dot && <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: dot }} />}
+                      {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {/* Filters (left-aligned, mirrors Data Assets) */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', width: 200 }}>

@@ -719,9 +719,11 @@ export default function DamaRolesPage({
       <div style={{ display: 'grid', gridTemplateColumns: previewRoleType ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
         <div>
           {/* Role chips grouped by category (was a left-rail tree; now top
-           *  facets). Shows the filled roles per category by default, matching
-           *  the rail's default view. */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+           *  facets). Shows the filled roles per category by default. Hidden
+           *  entirely when fewer than two role types are filled — the filter
+           *  can't split the list then, so it would only waste vertical space. */}
+          {Object.keys(ROLE_TYPE_LABELS).filter((rt) => (roleCounts[rt] || 0) > 0).length >= 2 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 onClick={() => setFilterRoleType(null)}
@@ -769,6 +771,7 @@ export default function DamaRolesPage({
               );
             })}
           </div>
+          )}
           <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
             {loading ? (
               <SkeletonRows rows={6} columns={4} />

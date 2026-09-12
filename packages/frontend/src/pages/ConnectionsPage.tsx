@@ -1027,34 +1027,41 @@ export default function ConnectionsPage({
 
         {/* Content Area */}
         <div>
-          {/* Connection Types chips (was a left-rail tree; now a top facet) */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {([
+          {/* Connection Types chips — only rendered when the facet actually
+              splits the list (≥2 populated types), to save vertical space. */}
+          {(() => {
+            const chips = [
               { key: '', label: 'All', count: connections.length },
               ...connectionTypes.map((t) => ({
                 key: t,
                 label: TYPE_LABELS[t] || t,
                 count: connections.filter((c) => c.connectionType === t).length,
               })),
-            ]).filter((o) => o.key === '' || o.count > 0).map((o) => {
-              const active = filterConnType === o.key;
-              return (
-                <button
-                  key={o.key || 'all'}
-                  onClick={() => setFilterConnType(o.key)}
-                  style={{
-                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-                </button>
-              );
-            })}
-          </div>
+            ].filter((o) => o.key === '' || o.count > 0);
+            if (chips.filter((o) => o.key !== '').length < 2) return null;
+            return (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                {chips.map((o) => {
+                  const active = filterConnType === o.key;
+                  return (
+                    <button
+                      key={o.key || 'all'}
+                      onClick={() => setFilterConnType(o.key)}
+                      style={{
+                        padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                        color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {/* Filters (left-aligned, mirrors Data Assets) */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', width: 200 }}>

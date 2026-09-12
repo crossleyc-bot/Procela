@@ -712,31 +712,35 @@ export default function DecisionRightsPage() {
       {/* Full-width content — Categories is now a top facet (was a left-rail
        *  tree) so it matches the chip filters used across the app. */}
       <div>
-        {rows.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {([
-              { key: 'ALL' as 'ALL' | DecisionCategory, label: 'All', count: rows.length },
-              ...CATEGORIES.map((c) => ({ key: c as 'ALL' | DecisionCategory, label: CATEGORY_LABELS[c], count: categoryCounts[c] || 0 })),
-            ]).filter((o) => o.key === 'ALL' || o.count > 0).map((o) => {
-              const active = categoryFilter === o.key;
-              return (
-                <button
-                  key={o.key}
-                  onClick={() => setCategoryFilter(o.key === 'ALL' ? 'ALL' : (active ? 'ALL' : o.key))}
-                  style={{
-                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {(() => {
+          const chips = [
+            { key: 'ALL' as 'ALL' | DecisionCategory, label: 'All', count: rows.length },
+            ...CATEGORIES.map((c) => ({ key: c as 'ALL' | DecisionCategory, label: CATEGORY_LABELS[c], count: categoryCounts[c] || 0 })),
+          ].filter((o) => o.key === 'ALL' || o.count > 0);
+          if (chips.filter((o) => o.key !== 'ALL').length < 2) return null;
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {chips.map((o) => {
+                const active = categoryFilter === o.key;
+                return (
+                  <button
+                    key={o.key}
+                    onClick={() => setCategoryFilter(o.key === 'ALL' ? 'ALL' : (active ? 'ALL' : o.key))}
+                    style={{
+                      padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
           {loadError ? (
