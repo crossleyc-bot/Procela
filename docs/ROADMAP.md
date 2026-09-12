@@ -135,17 +135,17 @@ ask for it.)*
 
 *Broaden Discover beyond relational databases. Track A closed the loop
 (real scan → measured DQ → reconcile into the catalog) for the four SQL
-engines. Everything **non**-relational is only partly there: the connection
-catalog already exposes object storage (S3 · Azure Blob · GCS · SFTP),
-NoSQL (MongoDB), cloud warehouses (Snowflake · BigQuery · Redshift ·
-Databricks), APIs, and spreadsheets as first-class categories — with
-reachability probes — but their discovery returns **hardcoded sample assets
-flagged `simulated: true`**, not real introspection. The one real
-non-relational path today is a **manual local-file upload** (CSV/TSV/JSON/
-JSONL/NDJSON), which is genuinely parsed. This track turns the mocked
-categories into real discovery, reusing the same discovery → DQ → reconcile
-plumbing rather than a parallel pipeline. Each item is independent and
-customer-gated — build the source a real pilot actually has.*
+engines; this track extended real discovery across the non-relational
+categories, reusing the same discovery → DQ → reconcile plumbing rather than a
+parallel pipeline. **As shipped (E1–E4 all done):** object storage
+(S3 · Azure Blob · GCS · SFTP), NoSQL (MongoDB), and cloud warehouses
+(Snowflake · BigQuery · Redshift · Databricks) now run **real** introspection
+(`simulated: false`), alongside genuinely-parsed local-file uploads
+(CSV/TSV/JSON/JSONL/NDJSON plus Parquet/Avro, with nested shapes flattened to
+dotted paths). Only **API** and **spreadsheet** sources still return
+reachability-probed sample assets flagged `simulated: true`. Each item was
+independent and customer-gated; the remaining work is live-account validation
+of the cloud/SDK adapters against real endpoints.*
 **Size: large. E1–E4 all shipped — the remaining work is live-account
 validation of the cloud/SDK adapters against real customer endpoints.**
 

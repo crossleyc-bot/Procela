@@ -1258,7 +1258,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     const healthTooltip = rs.length === 0
       ? 'No rules defined. Add rules to calculate health.'
       : estimated
-        ? `Health: ${score}% (estimated)\nThis asset's ${rs.length} rule${rs.length > 1 ? 's have' : ' has'} only simulated results, so they don't count toward measured health. The shown value comes from connector freshness or a manual score.\nMeasured DQ comes from a local-file (CSV) upload, or an on-prem connector (the five supported types: NOT_NULL, UNIQUE, IN_SET, NUMERIC_RANGE, LENGTH_RANGE). Direct database Connections and REGEX_MATCH/CUSTOM rules still simulate.`
+        ? `Health: ${score}% (estimated)\nThis asset's ${rs.length} rule${rs.length > 1 ? 's have' : ' has'} only simulated results, so they don't count toward measured health. The shown value comes from connector freshness or a manual score.\nMeasured DQ comes from a local-file (CSV) upload, a direct-connect database Connection, or an on-prem connector (the five supported types: NOT_NULL, UNIQUE, IN_SET, NUMERIC_RANGE, LENGTH_RANGE, run as a pushdown query). Data-warehouse Connections and REGEX_MATCH/CUSTOM rules still simulate.`
         : `Health: ${score}%\nWeighted average of ${measuredRuns} measured rule${measuredRuns > 1 ? 's' : ''} (of ${rs.length} total)\nFormula: Σ(score × weight) / Σ(weight)\nTotal weight: ${totalWeight}\nPassing: ${passing} | Warning: ${warn} | Failing: ${failing}`;
     return { rs, measured, measuredRuns, estimated, passing, failing, warn, score, healthColor, totalWeight, healthTooltip };
   };

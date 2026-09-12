@@ -986,7 +986,7 @@ export default function ConnectionsPage({
         title="Data Connections"
         subtitle={filterSystem
           ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
-          : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); credential validation happens when real drivers are wired in.'}
+          : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); Discover runs a real catalog scan for databases, warehouses, MongoDB, and cloud object stores (API and spreadsheet sources return sample assets).'}
         actions={
           <>
             <SavedViewsMenu

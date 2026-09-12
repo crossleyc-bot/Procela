@@ -14,7 +14,7 @@ Data assets,Data quality / health score,Built,Manual + rule-derived,P1,Add-on,Ad
 Data assets,Classification / sensitivity,Built,PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED,P0,Yes,Yes,Yes,Yes,—
 Data assets,Asset retention policy,Built,Duration + reason fields,P1,Yes,Partial,Partial,Yes,—
 Data assets,Column-level catalog,Built,DataAssetColumns sub-entity; auto-materialized from a binding column set,P1,Yes,Yes,Yes,Yes,—
-Data assets,Column auto-discovery,Built,"CSV uploads + on-prem connector reads information_schema.columns (Postgres/MySQL/SQL Server/Oracle)",P1,Yes,Yes,Yes,Yes,—
+Data assets,Column auto-discovery,Built,"File uploads (CSV/TSV/JSON/JSONL/NDJSON + Parquet/Avro schema), direct-connect + on-prem connector read information_schema.columns (Postgres/MySQL/SQL Server/Oracle/Redshift), warehouse SDKs (Snowflake/BigQuery/Databricks), MongoDB field inference, and cloud object stores (S3/Azure Blob/GCS/SFTP)",P1,Yes,Yes,Yes,Yes,—
 Data assets,Asset 360 view,Built,Linked mappings + bindings + bound-columns panel + per-column health + owner roll-up,P1,Yes,Yes,Yes,Yes,—
 Data assets,DQ coverage filter,Built,"List filter (has rules / no rules / rules-but-unmeasured Est) from repo-backed per-asset rule counts; surfaces un-measured and false-confidence assets",P2,Yes,Yes,Yes,Yes,—
 Glossary,Business glossary terms,Built,"Term, definition, category, status, domain, owner, source-of-truth",P0,Yes,Yes,Yes,Yes,—
@@ -26,9 +26,9 @@ Systems,Integration mechanism taxonomy,Built,"REST/SOAP/GraphQL/MQ/Stream/File/E
 Systems,System-to-system integration graph,Built,"SystemIntegration directed edges (target + interface + direction + cadence) with inverse traversal; rendered as inbound/outbound lists",P2,Partial,Yes,Partial,Yes,Add force-directed graph visualization
 Connections,Connection profiles,Built,"DATABASE/FILE_STORAGE/API/DATA_WAREHOUSE/SPREADSHEET with credentials",P0,Yes,Yes,Yes,Yes,—
 Connections,Many-to-many connection ↔ system,Built,ConnectionSystemLink join table,P1,Yes,Partial,Yes,Yes,—
-Connections,Real database connectors,Built,"On-prem edge agent ships Postgres/MySQL/SQL Server/Oracle adapters (pair -> discover -> sync)",P0,200+ native,200+ native,200+ native,Many,Expand adapter coverage (Snowflake/BigQuery/warehouses)
+Connections,Real database connectors,Built,"Direct-connect discovery for relational (Postgres/MySQL/SQL Server/Oracle/Redshift), warehouses (Snowflake/BigQuery/Databricks), MongoDB, and cloud object stores (S3/Azure Blob/GCS/SFTP); on-prem edge agent adds firewalled relational sources (pair -> discover -> sync)",P0,200+ native,200+ native,200+ native,Many,API/spreadsheet (SharePoint/Google Sheets) still probe-and-mock; expand native adapter breadth
 Connections,Connection testing,Built,Tests reachability; live test for staged file before save,P1,Yes,Yes,Yes,Yes,—
-Connections,Connection discovery (browse contents),Built,"Direct-connect Connections and the on-prem connector both discover real tables + columns; discovered assets reconcile into the catalog (suggest-and-confirm match, or create Bronze)",P0,Yes,Yes,Yes,Yes,Expand adapter coverage
+Connections,Connection discovery (browse contents),Built,"Direct-connect Connections, warehouses, MongoDB, cloud object stores, and the on-prem connector all discover real tables/columns/collections/objects; discovered assets reconcile into the catalog (suggest-and-confirm match, or create Bronze)",P0,Yes,Yes,Yes,Yes,Only API/spreadsheet sources remain simulated
 Lineage,Manual lineage links,Built,System-to-system + asset-level Data Lineage page,P1,Yes,Yes,Yes,Yes,—
 Lineage,Auto-extracted lineage (SQL/dbt),Partial,"dbt manifest ingestion (disk import + dbt Cloud API fetch) builds asset-level lineage edges from depends_on and derives DQ rules from dbt tests; SQL/query-log parsing not yet built",P0,Yes,Best-in-class,Best-in-class (dbt),Yes,Build SQL/query-log parser for non-dbt warehouses
 Lineage,Column-level lineage,Not Started,Schema supports it; no extraction,P1,Yes,Yes,Yes,Yes,Build extraction
