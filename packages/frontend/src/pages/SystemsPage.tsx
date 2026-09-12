@@ -164,6 +164,14 @@ const typeBadge: React.CSSProperties = {
   fontSize: 11, fontWeight: 500, background: 'var(--color-primary-light)', color: 'var(--color-primary)',
 };
 
+// Business-criticality badge palette. Hex pairs (bg + companion colour) so the
+// semantic-badge palette stays stable if the semantic vars are retuned.
+const CRITICALITY_BADGE: Record<string, { bg: string; color: string }> = {
+  HIGH:   { bg: '#fee2e2', color: '#dc2626' }, // red
+  MEDIUM: { bg: '#fef3c7', color: '#92400e' }, // amber
+  LOW:    { bg: '#f1f5f9', color: '#64748b' }, // neutral
+};
+
 interface FormData {
   name: string;
   description: string;
@@ -453,9 +461,10 @@ function ConnectPickerModal({
 // single-line sub-label under the system name (see the Name cell), so
 // the row reads name-over-description like a directory entry, matching
 // the Data Assets page.
-type SystemColId = 'type' | 'owner' | 'connections';
+type SystemColId = 'type' | 'criticality' | 'owner' | 'connections';
 const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible: boolean }> = [
   { id: 'type',        label: 'Type',        defaultVisible: true  },
+  { id: 'criticality', label: 'Criticality', defaultVisible: true  },
   { id: 'owner',       label: 'Owner',       defaultVisible: true  },
   { id: 'connections', label: 'Connections', defaultVisible: true  },
 ];
@@ -797,6 +806,11 @@ export default function SystemsPage({
     {
       name: (a, b) => a.name.localeCompare(b.name),
       type: (a, b) => (a.systemType || '').localeCompare(b.systemType || ''),
+      // Rank by severity (High > Medium > Low), not alphabetically.
+      criticality: (a, b) => {
+        const rank: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+        return (rank[a.businessCriticality || ''] || 0) - (rank[b.businessCriticality || ''] || 0);
+      },
       description: (a, b) => (a.description || '').localeCompare(b.description || ''),
       owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
       // Sort by the number of connections serving the system (what the
@@ -871,6 +885,20 @@ export default function SystemsPage({
           />
         ) : (
           sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+        );
+      },
+    },
+    systemCols.isVisible('criticality') && {
+      key: 'criticality', header: 'Criticality', sortable: true, width: 120,
+      render: (sys: SystemEntity) => {
+        const level = sys.businessCriticality;
+        if (!level) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+        const pal = CRITICALITY_BADGE[level] || CRITICALITY_BADGE.LOW;
+        const label = level.charAt(0) + level.slice(1).toLowerCase();
+        return (
+          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: pal.bg, color: pal.color }}>
+            {label}
+          </span>
         );
       },
     },
