@@ -62,11 +62,6 @@ const linkStyle: React.CSSProperties = {
   textDecoration: 'none',
 };
 
-const currentStyle: React.CSSProperties = {
-  fontWeight: 600,
-  color: '#6b7280',
-};
-
 const separatorStyle: React.CSSProperties = {
   color: '#d1d5db',
   userSelect: 'none',
@@ -82,32 +77,33 @@ export default function Breadcrumbs() {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length === 0) return null;
 
-  // Build breadcrumb items: always start with Dashboard
-  const crumbs: Array<{ label: string; path: string; isLast: boolean }> = [
-    { label: 'Dashboard', path: '/', isLast: false },
+  // Build breadcrumb items: always start with Dashboard.
+  const crumbs: Array<{ label: string; path: string }> = [
+    { label: 'Dashboard', path: '/' },
   ];
 
   let builtPath = '';
-  segments.forEach((segment, idx) => {
+  segments.forEach((segment) => {
     builtPath += `/${segment}`;
     const label = ROUTE_LABELS[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
-    crumbs.push({
-      label,
-      path: builtPath,
-      isLast: idx === segments.length - 1,
-    });
+    crumbs.push({ label, path: builtPath });
   });
+
+  // De-duplicate the current page: the last crumb always names the page you're
+  // on, which the <PageHeader> H1 immediately below already states — showing it
+  // again (and, on detail pages, as a raw id/slug) is redundant. Render only the
+  // ancestor trail as up-navigation links. When that leaves just "Dashboard"
+  // (a top-level page), the trail carries no information the sidebar + title
+  // don't, so render nothing rather than a lone one-item crumb.
+  const ancestors = crumbs.slice(0, -1);
+  if (ancestors.length <= 1) return null;
 
   return (
     <nav style={containerStyle} aria-label="Breadcrumb">
-      {crumbs.map((crumb, idx) => (
+      {ancestors.map((crumb, idx) => (
         <span key={crumb.path} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {idx > 0 && <span style={separatorStyle}>{'>'}</span>}
-          {crumb.isLast ? (
-            <span style={currentStyle}>{crumb.label}</span>
-          ) : (
-            <Link to={crumb.path} style={linkStyle}>{crumb.label}</Link>
-          )}
+          <Link to={crumb.path} style={linkStyle}>{crumb.label}</Link>
         </span>
       ))}
     </nav>
