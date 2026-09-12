@@ -272,10 +272,10 @@
     </div>
 
     <div class="find mg">
-      <div class="find-top"><span class="chip mg">Finish or hide</span><span class="count">real vs. simulated</span></div>
-      <h3>A few "connect your data" options are still simulated</h3>
-      <p>The real integrations work — but some direct database-connection options return <span class="em">made-up sample data</span> rather than connecting for real. A paid release shouldn't ship anything that pretends. Separately, two saved secrets (a dbt token and an SSO client secret) are stored as plain text.</p>
-      <div class="action"><b>Do:</b> finish these paths or hide them until they're real; move the two secrets into the encryption layer that already exists.</div>
+      <div class="find-top"><span class="chip mg">Resolved</span><span class="count">real vs. simulated</span></div>
+      <h3>"Connect your data" is now real for all but two source types</h3>
+      <p>Direct database, cloud-warehouse (Snowflake / BigQuery / Databricks / Redshift), MongoDB, and cloud object-storage (S3 / Azure Blob / GCS / SFTP) discovery all <span class="em">connect for real</span>; only <span class="em">API</span> and <span class="em">spreadsheet</span> sources still return clearly-labelled sample data (shown behind a "simulated" banner so nothing pretends to be live). The two saved secrets (a dbt token and an SSO client secret) were moved into the existing encryption layer.</p>
+      <div class="action"><b>Done:</b> real drivers shipped across databases, warehouses, MongoDB, and object storage; API/spreadsheet remain honestly labelled as sample; both secrets are now encrypted at rest.</div>
     </div>
   </section>
 

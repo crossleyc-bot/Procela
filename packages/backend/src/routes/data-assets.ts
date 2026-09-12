@@ -1383,8 +1383,9 @@ router.post('/:id/columns/auto-discover', async (req: Request, res: Response) =>
     return;
   }
   try {
-    // Use the shared connector service — it handles LOCAL files with real
-    // parsing and simulates discovery for DATABASE, API, WAREHOUSE, etc.
+    // Use the shared connector service — it runs real discovery for LOCAL
+    // files, relational databases, warehouses, MongoDB, and cloud object
+    // stores, and simulates discovery for API / SPREADSHEET sources.
     const { discoverAssets } = require('../services/connector.service');
     const result = await discoverAssets(conn);
 
