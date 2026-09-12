@@ -193,4 +193,8 @@ Procela/
 
 ## License
 
-MIT
+**Proprietary — © 2026 Datalign Technology, Inc. All rights reserved.**
+
+Procela is closed-source commercial software. It is **not** open source,
+and no permission is granted to use, copy, modify, or distribute it except
+under a separate written agreement. See [`LICENSE`](./LICENSE).

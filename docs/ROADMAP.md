@@ -86,6 +86,16 @@ SaaS rather than white-glove enterprise onboarding.*
   per-tenant IdP config, which today is env/tfvar-level).
 - **C3 — Legal content.** ToS, privacy policy, and DPA are placeholder
   text; the doc hooks exist (**#18**).
+  - **Software licensing — decided 2026-08-06.** Procela is
+    closed-source commercial. The repository was made **private**, and
+    the license changed from a bare "MIT" assertion (no `LICENSE` file,
+    no `package.json` field) to a **proprietary / all-rights-reserved**
+    `LICENSE`, with `package.json` set to `UNLICENSED` (PR **#247**).
+    The published GHCR connector image stays **public** so customers can
+    still pull it (verified anonymously pullable). Counsel still to
+    confirm the `LICENSE` wording and the copyright-holding legal
+    entity. This settles the *software* license only — the ToS /
+    privacy / DPA product content above is still outstanding.
 
 ## Track D — canonical data-model gaps
 
