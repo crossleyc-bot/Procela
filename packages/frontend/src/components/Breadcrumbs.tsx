@@ -50,7 +50,7 @@ const ROUTE_LABELS: Record<string, string> = {
 const containerStyle: React.CSSProperties = {
   fontSize: 12,
   color: '#6b7280',
-  marginBottom: 16,
+  marginBottom: 10,
   display: 'flex',
   alignItems: 'center',
   gap: 6,

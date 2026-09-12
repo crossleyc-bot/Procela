@@ -411,8 +411,10 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   the `width` prop (`default`, `narrow`, `wizard`), never inline
   `maxWidth`.
 - `<PageHeader>` — the standard title + subtitle + actions row.
-  Title renders at `1.625rem` (26px). Do NOT hand-roll an `<h1>` at
-  the top of a page.
+  Title renders at `1.375rem` (22px) on a compact band (10px bottom
+  padding, 1rem bottom margin). Do NOT hand-roll an `<h1>` at the top
+  of a page, and do NOT re-inflate the title size or band spacing per
+  page — the density is intentional and set here for every page.
 - `<FieldStack>` — the vertical-rhythm primitive: a flex column that
   owns the spacing between stacked fields/panels from the `--space-*`
   tokens (`tight` 4px / `field` 8px / `section` 16px). Compose it
