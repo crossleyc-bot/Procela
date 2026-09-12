@@ -1514,10 +1514,11 @@ export default function DataAssetsPage({
 
         {/* Content area */}
         <div>
-      {/* Data Classification chips (was a left-rail tree; now a top facet like Origin) */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Classification</span>
-        {([
+      {/* Data Classification chips — only rendered when the facet actually
+          splits the list (≥2 populated values); a lone "All / Untyped" pair
+          filters nothing, so it's hidden to save vertical space. */}
+      {(() => {
+        const chips = ([
           { key: '', label: 'All', count: assets.length, hint: 'Every classification' },
           { key: 'MASTER', label: 'Master', count: assets.filter((a) => a.dataType === 'MASTER').length, hint: 'Master data' },
           { key: 'REFERENCE', label: 'Reference', count: assets.filter((a) => a.dataType === 'REFERENCE').length, hint: 'Reference data' },
@@ -1525,56 +1526,69 @@ export default function DataAssetsPage({
           { key: 'ANALYTICAL', label: 'Analytical', count: assets.filter((a) => a.dataType === 'ANALYTICAL').length, hint: 'Analytical data' },
           { key: 'METADATA', label: 'Metadata', count: assets.filter((a) => a.dataType === 'METADATA').length, hint: 'Metadata' },
           { key: '__none__', label: 'Untyped', count: assets.filter((a) => !a.dataType).length, hint: 'No classification set' },
-        ] as const).filter((o) => o.key === '' || o.count > 0).map((o) => {
-          const active = filterCategory === o.key;
-          return (
-            <button
-              key={o.key || 'all'}
-              onClick={() => setFilterCategory(o.key)}
-              title={o.hint}
-              style={{
-                padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                cursor: 'pointer',
-              }}
-            >
-              {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-            </button>
-          );
-        })}
-      </div>
-      {/* Origin chips — separate governance/discovered/synced rows from manual entries */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Origin</span>
-        {([
+        ] as const).filter((o) => o.key === '' || o.count > 0);
+        if (chips.filter((o) => o.key !== '').length < 2) return null;
+        return (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Classification</span>
+            {chips.map((o) => {
+              const active = filterCategory === o.key;
+              return (
+                <button
+                  key={o.key || 'all'}
+                  onClick={() => setFilterCategory(o.key)}
+                  title={o.hint}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+      {/* Origin chips — only rendered when the facet actually splits the list. */}
+      {(() => {
+        const chips = ([
           { key: '', label: 'All', count: assets.length, hint: 'Show every data asset' },
           { key: 'MANUAL', label: 'Manual', count: assets.filter((a) => (a.origin || 'MANUAL') === 'MANUAL').length, hint: 'Typed by a user' },
           { key: 'DISCOVERED', label: 'Discovered', count: assets.filter((a) => a.origin === 'DISCOVERED').length, hint: 'Created from a connection' },
           { key: 'GOVERNANCE_TEMPLATE', label: 'Governance', count: assets.filter((a) => a.origin === 'GOVERNANCE_TEMPLATE').length, hint: 'Seeded by the Data Governance value stream' },
           { key: 'IMPORTED', label: 'Imported', count: assets.filter((a) => a.origin === 'IMPORTED').length, hint: 'Created via bulk import' },
           { key: 'SYNCED', label: 'Synced', count: assets.filter((a) => a.origin === 'SYNCED').length, hint: 'Created by a sync connection' },
-        ] as const).filter((o) => o.key === '' || o.count > 0).map((o) => {
-          const active = filterOrigin === o.key;
-          return (
-            <button
-              key={o.key || 'all'}
-              onClick={() => setFilterOrigin(o.key as typeof filterOrigin)}
-              title={o.hint}
-              style={{
-                padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                cursor: 'pointer',
-              }}
-            >
-              {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-            </button>
-          );
-        })}
-      </div>
+        ] as const).filter((o) => o.key === '' || o.count > 0);
+        if (chips.filter((o) => o.key !== '').length < 2) return null;
+        return (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Origin</span>
+            {chips.map((o) => {
+              const active = filterOrigin === o.key;
+              return (
+                <button
+                  key={o.key || 'all'}
+                  onClick={() => setFilterOrigin(o.key as typeof filterOrigin)}
+                  title={o.hint}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
