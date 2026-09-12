@@ -65,7 +65,11 @@ row's status changes so the snapshot doesn't drift from the source of truth._
 Where it actually matters: of the **P0** items, the open ones are the
 SQL/query-log half of auto-extracted lineage (the dbt half ships) and
 live SaaS hosting. (SSO — OIDC + SAML 2.0 with SCIM and JIT
-provisioning — is implemented and config-gated; real database
-connectors ship via the on-prem edge agent; the Postgres backing is
-complete — set `DATABASE_URL` and the whole backend runs on it.)
-Everything else is shipable wins or strategic defers.
+provisioning — is implemented and config-gated; direct-connect
+discovery is real across relational engines, cloud warehouses
+[Snowflake/BigQuery/Databricks/Redshift], MongoDB, and cloud object
+stores [S3/Azure Blob/GCS/SFTP], with the on-prem edge agent covering
+firewalled sources — only API/spreadsheet sources remain simulated;
+the Postgres backing is complete — set `DATABASE_URL` and the whole
+backend runs on it.) Everything else is shipable wins or strategic
+defers.

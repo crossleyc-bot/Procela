@@ -236,9 +236,16 @@ before the real drivers land.
     over time on both scan paths (on-prem connector report + direct-connect
     reconcile): a persisted schema fingerprint flags a changed column set —
     raising an auto-resolving `SCHEMA_DRIFT` governance issue — and a graded
-    row-count-delta penalizes a shrink (`lib/schema-drift.ts`). Only
-    API/WAREHOUSE/SPREADSHEET types and the REGEX_MATCH/CUSTOM rule types remain
-    simulated-and-labelled. See `docs/ROADMAP.md` Track A.
+    row-count-delta penalizes a shrink (`lib/schema-drift.ts`). See
+    `docs/ROADMAP.md` Track A.
+  - **Update — now real for the non-relational sources too (Track E shipped).**
+    Direct-connect discovery is now real beyond relational databases: cloud
+    **warehouses** (Snowflake/BigQuery/Databricks/Redshift), **MongoDB**, and
+    cloud **object storage** (S3/Azure Blob/GCS/SFTP, incl. Parquet/Avro schema)
+    all set `simulated:false` and reconcile through the same path. Only **API**
+    and **SPREADSHEET** connection types, and the REGEX_MATCH/CUSTOM DQ rule
+    types, remain simulated-and-labelled. See `docs/non-relational-discovery.md`
+    and `docs/ROADMAP.md` Track E.
 - **`SyncConnection` DATABASE source** — _(interim; superseded — see the
   §F live-driver outcome below.)_ Was relabelled "Database Table (simulated)"
   while drivers were unwired; the source now connects for real (Postgres /
