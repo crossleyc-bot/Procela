@@ -51,8 +51,9 @@ before the next screen: `<Page padding="8px 0 64px">`.
 
 ### `<PageHeader>`
 
-The band at the top of every page. Title (26px) + subtitle + right-
-aligned actions. Optional kicker (eyebrow) and meta row.
+The band at the top of every page. Title (22px, on a compact band —
+10px bottom padding, 1rem bottom margin) + subtitle + right-aligned
+actions. Optional kicker (eyebrow) and meta row.
 
 ```tsx
 <PageHeader

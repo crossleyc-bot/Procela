@@ -42,8 +42,8 @@ export default function PageHeader({ kicker, title, subtitle, children, actions,
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         gap: 16,
-        marginBottom: '1.5rem',
-        paddingBottom: 14,
+        marginBottom: '1rem',
+        paddingBottom: 10,
         borderBottom: '1px solid var(--color-border)',
       }}
     >
@@ -63,13 +63,13 @@ export default function PageHeader({ kicker, title, subtitle, children, actions,
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: '1.625rem', fontWeight: 700, lineHeight: 1.2, margin: 0 }}>{title}</h1>
+          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, lineHeight: 1.25, margin: 0 }}>{title}</h1>
           {children}
         </div>
         {subtitle && (
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 6, marginBottom: 0, lineHeight: 1.55 }}>{subtitle}</p>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4, marginBottom: 0, lineHeight: 1.5 }}>{subtitle}</p>
         )}
-        {meta && <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>{meta}</div>}
+        {meta && <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>{meta}</div>}
       </div>
       {actions && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>{actions}</div>

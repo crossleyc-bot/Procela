@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react';
 import PageHeader from './PageHeader';
 
 describe('PageHeader', () => {
-  it('renders the title as an h1 with the 26px polish treatment', () => {
+  it('renders the title as an h1 with the 22px polish treatment', () => {
     render(<PageHeader title="Data Assets" />);
     const h1 = screen.getByRole('heading', { level: 1 });
     expect(h1).toHaveTextContent('Data Assets');
-    expect(h1.style.fontSize).toBe('1.625rem');
+    expect(h1.style.fontSize).toBe('1.375rem');
     expect(h1.style.fontWeight).toBe('700');
   });
 
