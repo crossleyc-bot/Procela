@@ -146,7 +146,8 @@ JSONL/NDJSON), which is genuinely parsed. This track turns the mocked
 categories into real discovery, reusing the same discovery → DQ → reconcile
 plumbing rather than a parallel pipeline. Each item is independent and
 customer-gated — build the source a real pilot actually has.*
-**Size: large. E2 (MongoDB) shipped; sequence E1/E3 by customer need.**
+**Size: large. E1–E4 all shipped — the remaining work is live-account
+validation of the cloud/SDK adapters against real customer endpoints.**
 
 - **E1 — Object storage + file schema inference. ✅ Shipped.** Both halves are
   done. *Columnar formats:* the local-file connector reads **Parquet** (footer
@@ -172,21 +173,26 @@ customer-gated — build the source a real pilot actually has.*
   `DiscoveredAsset` shape as the SQL path (`simulated: false`), so it reconciles
   through the identical downstream flow. Row *sync* stays out of scope — Mongo
   is discovery-only for now. *(see `lib/db-source/mongo-introspect.ts`.)*
-- **E3 — Cloud warehouse discovery. Redshift · Snowflake · BigQuery ✅ shipped;
-  Databricks open.** A `DATA_WAREHOUSE` connection runs real discovery for three
-  engines now. **Redshift** speaks the PostgreSQL wire protocol and exposes
-  `information_schema`, so it reuses the `pg` driver and the Postgres dialect
-  with no new dependency (only its row-count differs — `svv_table_info`).
-  **Snowflake** and **BigQuery** each have a distinct connection model, so — like
-  MongoDB — each gets its own module (`snowflake-introspect.ts`,
-  `bigquery-introspect.ts`) running that engine's `INFORMATION_SCHEMA` catalog
-  SQL and the shared `groupAssets` / `applyRowCounts` grouping: Snowflake via
-  `snowflake-sdk` (account/warehouse/database, `?`-bound schema filter),
-  BigQuery via `@google-cloud/bigquery` (project/dataset, per-dataset
-  `INFORMATION_SCHEMA` with identifier-validated back-ticked paths, ADC or a
-  service-account key). **Databricks** is the one remaining engine — it needs a
-  Databricks SQL client and a live workspace to validate. *Fit: new drivers on a
-  proven interface. Effort: medium.*
+- **E3 — Cloud warehouse discovery. Redshift · Snowflake · BigQuery ·
+  Databricks ✅ shipped.** A `DATA_WAREHOUSE` connection runs real discovery for
+  all four engines now. **Redshift** speaks the PostgreSQL wire protocol and
+  exposes `information_schema`, so it reuses the `pg` driver and the Postgres
+  dialect with no new dependency (only its row-count differs — `svv_table_info`).
+  **Snowflake**, **BigQuery**, and **Databricks** each have a distinct connection
+  model, so — like MongoDB — each gets its own module (`snowflake-introspect.ts`,
+  `bigquery-introspect.ts`, `databricks-introspect.ts`) running that engine's
+  `INFORMATION_SCHEMA` catalog SQL and the shared `groupAssets` /
+  `applyRowCounts` grouping: Snowflake via `snowflake-sdk`
+  (account/warehouse/database, `?`-bound schema filter), BigQuery via
+  `@google-cloud/bigquery` (project/dataset, per-dataset `INFORMATION_SCHEMA`
+  with identifier-validated back-ticked paths, ADC or a service-account key),
+  Databricks via `@databricks/sql` (workspace host + SQL-warehouse HTTP path +
+  token, per-catalog `information_schema` with an identifier-validated
+  back-ticked catalog and single-quoted schema filter; no maintained row count,
+  so counts are left undefined rather than run a per-table `COUNT(*)`). The live
+  SDK paths can only be validated against real accounts; the request mappers,
+  SQL builders, and injection guards are all unit-tested without them. *Fit: new
+  drivers on a proven interface. Effort: medium.*
 - **E4 — Deep semi-structured parsing (cross-cutting). ✅ Shipped.** A shared
   pure flattener (`lib/flatten-paths.ts`) walks a JSON row or a Mongo document
   into dotted leaf paths — `{ address: { city } }` is catalogued as
@@ -212,7 +218,7 @@ explicitly marked N/A — no mock rows reaching the governed catalog.*
 | **B** | Production-scale hardening | Medium | A running deploy (task #3) |
 | **C** | Commercial SaaS readiness | Large / Med / Small | Go-to-market = self-serve SaaS |
 | **D** | Canonical data-model gaps (EDM review) | Large (D2) / Small–Med | Nothing; incremental anytime |
-| **E** | Non-relational source discovery — object storage, NoSQL, warehouses | Large | A pilot customer with that source type |
+| **E** | Non-relational source discovery — object storage, NoSQL, warehouses (E1–E4 built) | Large | Live-account validation against a real source |
 
 **Not yet decided:** which track leads. That is a go-to-market call, not a
 technical one — capture the decision here when it's made and sequence the
