@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { clickable } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
@@ -177,31 +176,6 @@ function Chips({ values, people, groups }: { values: string[]; people: Person[];
       {values.map((v) => (
         <span key={v} style={chipStyle}>{labelFor(v, people, groups)}</span>
       ))}
-    </div>
-  );
-}
-
-// Single sidebar entry — All Categories or one named category, with count
-// and active-state highlighting. Mirrors the sidebar items on /data-assets
-// and /systems so the scan pattern is consistent across the app.
-function SidebarItem({ label, count, active, onClick }: {
-  label: string; count: number; active: boolean; onClick: () => void;
-}) {
-  return (
-    <div
-      {...clickable(onClick, { label: `${label} (${count})`, pressed: active })}
-      style={{
-        padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-        fontWeight: active ? 600 : 400,
-        background: active ? 'var(--color-primary-light)' : 'transparent',
-        color: active ? 'var(--color-primary)' : 'var(--color-text)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-    >
-      <span>{label}</span>
-      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
     </div>
   );
 }
@@ -735,40 +709,30 @@ export default function DecisionRightsPage() {
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 
-      {/* Two-column layout: Categories sidebar + content. Mirrors
-       *  DataAssetsPage / SystemsPage so users get the same scan pattern
-       *  across the app. */}
-      <div style={{ display: 'grid', gridTemplateColumns: rows.length > 0 ? '220px 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
+      {/* Full-width content — Categories is now a top facet (was a left-rail
+       *  tree) so it matches the chip filters used across the app. */}
+      <div>
         {rows.length > 0 && (
-          <div style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 10,
-            position: 'sticky', top: 12,
-            maxHeight: 'calc(100vh - 180px)',
-            overflowY: 'auto',
-          }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
-              Categories
-            </div>
-            <SidebarItem
-              label="All Categories"
-              count={rows.length}
-              active={categoryFilter === 'ALL'}
-              onClick={() => setCategoryFilter('ALL')}
-            />
-            {CATEGORIES.map((c) => {
-              const n = categoryCounts[c] || 0;
-              if (n === 0) return null;
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {([
+              { key: 'ALL' as 'ALL' | DecisionCategory, label: 'All', count: rows.length },
+              ...CATEGORIES.map((c) => ({ key: c as 'ALL' | DecisionCategory, label: CATEGORY_LABELS[c], count: categoryCounts[c] || 0 })),
+            ]).filter((o) => o.key === 'ALL' || o.count > 0).map((o) => {
+              const active = categoryFilter === o.key;
               return (
-                <SidebarItem
-                  key={c}
-                  label={CATEGORY_LABELS[c]}
-                  count={n}
-                  active={categoryFilter === c}
-                  onClick={() => setCategoryFilter(categoryFilter === c ? 'ALL' : c)}
-                />
+                <button
+                  key={o.key}
+                  onClick={() => setCategoryFilter(o.key === 'ALL' ? 'ALL' : (active ? 'ALL' : o.key))}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                </button>
               );
             })}
           </div>
