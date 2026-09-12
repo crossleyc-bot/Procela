@@ -18,7 +18,6 @@ import PersonPicker from '../components/PersonPicker';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { SkeletonRows } from '../components/Skeleton';
-import { clickable } from '../lib/a11y';
 import { GOVERNANCE_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 
 // Required governance roles (CDO, Data Governance Lead, Data Owner,
@@ -255,14 +254,6 @@ export default function DamaRolesPage({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [filterRoleType, setFilterRoleType] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  // Sidebar category collapse state (mirrors the main panel's collapse
-  // controls but lives separately — users can fold the sidebar
-  // independently from the cards).
-  const [collapsedSidebarCats, setCollapsedSidebarCats] = useState<Set<string>>(new Set());
-  // Per-category "show all" toggle for unfilled rows. Default state
-  // hides rows with zero holders so the sidebar stops feeling like a
-  // wall of zeros; click "+ N more" on a category to reveal them.
-  const [sidebarShowAll, setSidebarShowAll] = useState<Set<string>>(new Set());
   // Which role's detail pane is open on the right. Mirrors the People
   // page's preview-on-click pattern — click any row in the table to
   // open the role's holders/matrix in the right rail; click again to
@@ -725,79 +716,59 @@ export default function DamaRolesPage({
        *  category structure (Executive / Business / Technical /
        *  Entity-attached) and shows a fill summary per section so
        *  staffing coverage is visible at a glance. */}
-      <div style={{ display: 'grid', gridTemplateColumns: previewRoleType ? '260px 1fr 340px' : '260px 1fr', gap: 16, alignItems: 'start' }}>
-        <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
-            Roles
-          </div>
-          <SidebarItem label="All Roles" count={roles.length} active={!filterRoleType} onClick={() => setFilterRoleType(null)} />
-          {CATEGORY_ORDER.map((cat) => {
-            const inCat = Object.keys(ROLE_TYPE_LABELS).filter((rt) => ROLE_CATEGORIES[rt] === cat);
-            if (inCat.length === 0) return null;
-            const filledCount = inCat.filter((rt) => (roleCounts[rt] || 0) > 0).length;
-            const c = CATEGORY_COLORS[cat] || NEUTRAL_PALETTE;
-            const open = !collapsedSidebarCats.has(cat);
-            // Show unfilled rows only when the user opts in per
-            // category. The currently-active role stays visible
-            // either way so the active state isn't orphaned.
-            const showAll = sidebarShowAll.has(cat);
-            const visibleRoles = showAll
-              ? inCat
-              : inCat.filter((rt) => (roleCounts[rt] || 0) > 0 || filterRoleType === rt);
-            const hiddenCount = inCat.length - visibleRoles.length;
-            return (
-              <SidebarCategory
-                key={cat}
-                label={cat}
-                filled={filledCount}
-                total={inCat.length}
-                color={c.color}
-                open={open}
-                onToggle={() => setCollapsedSidebarCats((prev) => {
-                  const next = new Set(prev);
-                  next.has(cat) ? next.delete(cat) : next.add(cat);
-                  return next;
-                })}
-              >
-                {visibleRoles.map((rt) => {
-                  const count = roleCounts[rt] || 0;
-                  const isActive = filterRoleType === rt;
-                  return (
-                    <SidebarItem
-                      key={rt}
-                      label={ROLE_TYPE_LABELS[rt]}
-                      count={count}
-                      active={isActive}
-                      onClick={() => setFilterRoleType(isActive ? null : rt)}
-                      accent={c.color}
-                      indent
-                    />
-                  );
-                })}
-                {(hiddenCount > 0 || showAll) && (
-                  <button
-                    type="button"
-                    onClick={() => setSidebarShowAll((prev) => {
-                      const next = new Set(prev);
-                      next.has(cat) ? next.delete(cat) : next.add(cat);
-                      return next;
-                    })}
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      padding: '4px 8px 6px 21px', fontSize: 11,
-                      color: 'var(--color-text-muted)', fontFamily: 'inherit',
-                      textAlign: 'left', width: '100%',
-                    }}
-                  >
-                    {showAll ? 'Show fewer' : `+ ${hiddenCount} unfilled`}
-                  </button>
-                )}
-              </SidebarCategory>
-            );
-          })}
-        </Card>
-
+      <div style={{ display: 'grid', gridTemplateColumns: previewRoleType ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
         <div>
+          {/* Role chips grouped by category (was a left-rail tree; now top
+           *  facets). Shows the filled roles per category by default, matching
+           *  the rail's default view. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setFilterRoleType(null)}
+                style={{
+                  padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                  border: `1px solid ${!filterRoleType ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  background: !filterRoleType ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                  color: !filterRoleType ? 'var(--color-primary)' : 'var(--color-text)',
+                  cursor: 'pointer',
+                }}
+              >
+                All Roles <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({roles.length})</span>
+              </button>
+            </div>
+            {CATEGORY_ORDER.map((cat) => {
+              const inCat = Object.keys(ROLE_TYPE_LABELS).filter((rt) => ROLE_CATEGORIES[rt] === cat);
+              const visibleRoles = inCat.filter((rt) => (roleCounts[rt] || 0) > 0 || filterRoleType === rt);
+              if (visibleRoles.length === 0) return null;
+              const c = CATEGORY_COLORS[cat] || NEUTRAL_PALETTE;
+              return (
+                <div key={cat} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: c.color, marginRight: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color, display: 'inline-block' }} />
+                    {cat}
+                  </span>
+                  {visibleRoles.map((rt) => {
+                    const isActive = filterRoleType === rt;
+                    return (
+                      <button
+                        key={rt}
+                        onClick={() => setFilterRoleType(isActive ? null : rt)}
+                        style={{
+                          padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                          border: `1px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                          background: isActive ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                          color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {ROLE_TYPE_LABELS[rt]} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({roleCounts[rt] || 0})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
           <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
             {loading ? (
               <SkeletonRows rows={6} columns={4} />
@@ -839,88 +810,6 @@ export default function DamaRolesPage({
         )}
       </div>
     </div>
-  );
-}
-
-// ── Sidebar entry ─────────────────────────────────────────────────────────
-// Single role-type item in the left sidebar. Active state mirrors the
-// other sidebar-based pages so the pattern is identical visually.
-function SidebarItem({ label, count, active, onClick, accent, indent }: {
-  label: string; count: number; active: boolean; onClick: () => void; accent?: string;
-  /** Nested under a category header. Adds left padding so the row
-   *  reads as a child of its category. */
-  indent?: boolean;
-}) {
-  return (
-    <div
-      {...clickable(onClick, { label: `${label} (${count})`, pressed: active })}
-      style={{
-        padding: `5px 8px 5px ${indent ? 18 : 8}px`,
-        fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-        fontWeight: active ? 600 : 400,
-        background: active ? 'var(--color-primary-light)' : 'transparent',
-        color: active ? 'var(--color-primary)' : 'var(--color-text)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        borderLeft: accent ? `3px solid ${accent}` : '3px solid transparent',
-      }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-    >
-      <span>{label}</span>
-      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
-    </div>
-  );
-}
-
-// Sidebar category header — collapses a group of roles and surfaces
-// the fill ratio ("0 of 2 filled") so coverage is readable without
-// scanning every card on the right.
-function SidebarCategory({ label, filled, total, color, open, onToggle, children }: {
-  label: string;
-  filled: number;
-  total: number;
-  color: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ marginTop: 4 }}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 6px', background: 'none', border: 'none',
-          borderLeft: `3px solid ${color}`,
-          cursor: 'pointer', fontFamily: 'inherit', color: 'var(--color-text)',
-        }}
-      >
-        <RolesChevron open={open} />
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 500 }}>
-          {filled}/{total}
-        </span>
-      </button>
-      {open && <div style={{ marginTop: 2 }}>{children}</div>}
-    </div>
-  );
-}
-
-
-// ── Small atoms used by the expand/collapse controls ─────────────────────
-
-function RolesChevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="12" height="12" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
-      aria-hidden="true" focusable="false"
-      style={{ flexShrink: 0, opacity: 0.55, transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'none' }}
-    >
-      <path d="M9 5 L15 12 L9 19" />
-    </svg>
   );
 }
 
