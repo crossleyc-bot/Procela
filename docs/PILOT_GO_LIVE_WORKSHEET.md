@@ -11,11 +11,11 @@ required.
 - Secret generation + placement, per-variable degrade behaviour →
   [`DEPLOY_RUNBOOK.md`](./DEPLOY_RUNBOOK.md)
 - Full readiness checklist (all 27 items, not just the fast path) →
-  [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md)
+  [`STATUS.md` § Go-live checklist](./STATUS.md#go-live-checklist)
 - Restore / rollback / secret rotation → [`DR_RUNBOOK.md`](./DR_RUNBOOK.md)
 - Terraform specifics → [`../deploy/terraform/README.md`](../deploy/terraform/README.md)
 
-The fast-path subset is GO_LIVE_CHECKLIST items **1, 2, 4, 6, 7, 9, 10,
+The fast-path subset is STATUS.md go-live checklist items **1, 2, 4, 6, 7, 9, 10,
 12, 13, 15, 22, 23**. Items 4 (array retirement), 22 (dependency audit /
 SAST), 23 (DR runbook), and the whole code surface are already **done** —
 this worksheet is the remaining operator actions.
@@ -151,8 +151,8 @@ aws ecs update-service \
 
 ## Still owed before calling it "production" (not blockers for a pilot)
 
-These are tracked in GO_LIVE_CHECKLIST and are deliberately *not* on the
-fast path — flag them to the customer, don't let them silently slip:
+These are tracked in the STATUS.md go-live checklist and are deliberately *not*
+on the fast path — flag them to the customer, don't let them silently slip:
 
 - **Pen test** (#22) — SAST (CodeQL) and the dependency audit are done; an
   external pen test is not.

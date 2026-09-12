@@ -325,7 +325,7 @@ jobs:
 
   # Lints + renders the on-prem Helm chart so a broken template or values
   # regression is caught in CI (the chart previously had no automated
-  # check — see GO_LIVE_CHECKLIST #26). No cluster needed: `helm lint`
+  # check — see STATUS.md go-live #26). No cluster needed: `helm lint`
   # validates Chart/values, `helm template` proves every manifest renders.
   helm-lint:
     name: Helm lint

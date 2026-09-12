@@ -791,38 +791,38 @@ function readHelpGuide(): { contents: string; path: string } {
 }
 
 /**
- * Roadmap source. The single source of truth is docs/ROADMAP.md at the repo
- * root — the same file engineering edits directly. Served rendered at
- * /roadmap.html (the in-app /roadmap page embeds it) so the in-app view can
- * never drift from the markdown. Resolved via the same repo-root candidates
- * as TRAINING.md (docs/ isn't bundled into dist/; container builds cp the
- * docs/ tree alongside dist/). mtime-cached so an edit reloads on the next
- * request without bouncing the server.
+ * Roadmap / status source. The single source of truth is docs/STATUS.md at the
+ * repo root — the consolidated status, roadmap and open-work register that
+ * engineering edits directly. Served rendered at /roadmap.html (the in-app
+ * /roadmap page embeds it) so the in-app view can never drift from the markdown.
+ * Resolved via the same repo-root candidates as TRAINING.md (docs/ isn't bundled
+ * into dist/; container builds cp the docs/ tree alongside dist/). mtime-cached
+ * so an edit reloads on the next request without bouncing the server.
  */
-const ROADMAP_CANDIDATES = [
+const STATUS_DOC_CANDIDATES = [
   // Dev: routes/docs.ts → src/routes → packages/backend → packages → repo root
-  path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'ROADMAP.md'),
+  path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'STATUS.md'),
   // Built artefact: dist/routes/docs.js sits one level lower
-  path.resolve(__dirname, '..', '..', '..', '..', '..', 'docs', 'ROADMAP.md'),
+  path.resolve(__dirname, '..', '..', '..', '..', '..', 'docs', 'STATUS.md'),
   // Container deployment where docs/ is copied next to dist/
-  path.resolve(__dirname, '..', '..', 'docs', 'ROADMAP.md'),
+  path.resolve(__dirname, '..', '..', 'docs', 'STATUS.md'),
 ];
 
-let cachedRoadmapMd: { contents: string; mtimeMs: number; path: string } | null = null;
+let cachedStatusMd: { contents: string; mtimeMs: number; path: string } | null = null;
 
 function readRoadmap(): { contents: string; path: string } {
-  for (const candidate of ROADMAP_CANDIDATES) {
+  for (const candidate of STATUS_DOC_CANDIDATES) {
     try {
       const stat = fs.statSync(candidate);
-      if (cachedRoadmapMd && cachedRoadmapMd.path === candidate && cachedRoadmapMd.mtimeMs === stat.mtimeMs) {
-        return { contents: cachedRoadmapMd.contents, path: cachedRoadmapMd.path };
+      if (cachedStatusMd && cachedStatusMd.path === candidate && cachedStatusMd.mtimeMs === stat.mtimeMs) {
+        return { contents: cachedStatusMd.contents, path: cachedStatusMd.path };
       }
       const contents = fs.readFileSync(candidate, 'utf-8');
-      cachedRoadmapMd = { contents, mtimeMs: stat.mtimeMs, path: candidate };
+      cachedStatusMd = { contents, mtimeMs: stat.mtimeMs, path: candidate };
       return { contents, path: candidate };
     } catch { /* try next candidate */ }
   }
-  throw new Error('ROADMAP.md not found in any known location.');
+  throw new Error('STATUS.md not found in any known location.');
 }
 
 /**
@@ -886,18 +886,20 @@ router.get('/help.html', (_req: Request, res: Response) => {
 });
 
 /**
- * GET /api/v1/docs/roadmap.html — generated HTML of the post-cutover roadmap.
+ * GET /api/v1/docs/roadmap.html — generated HTML of the status / roadmap doc.
  *
- * The same render + headers as /help.html, sourced live from docs/ROADMAP.md
- * (the source of truth). The in-app /roadmap page embeds this in a same-origin
- * iframe; edit the markdown and the rendered page follows on the next request.
+ * The same render + headers as /help.html, sourced live from docs/STATUS.md
+ * (the consolidated source of truth). The in-app /roadmap page embeds this in a
+ * same-origin iframe; edit the markdown and the rendered page follows on the
+ * next request. (The endpoint path stays /roadmap.html so saved deep links keep
+ * working.)
  */
 router.get('/roadmap.html', (_req: Request, res: Response) => {
   try {
     const { contents } = readRoadmap();
     const html = renderMarkdownToHtml(contents, {
-      title: 'Procela Roadmap',
-      subtitle: 'Post-cutover roadmap — the four frontiers beyond v1.',
+      title: 'Procela Status & Roadmap',
+      subtitle: 'Status, roadmap and open work — the consolidated register.',
     });
     res.type('text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');

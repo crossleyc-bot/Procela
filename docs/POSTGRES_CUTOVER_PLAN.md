@@ -9,8 +9,8 @@
 
 Moving the backend from JSON-file persistence to Postgres so that setting
 `DATABASE_URL` yields a correct, multi-instance-safe system. This is the
-detailed engineering plan behind checklist items **#3, #4, #5** in
-[`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md). It is grounded in the current
+detailed engineering plan behind go-live checklist items **#3, #4, #5** in
+[`STATUS.md`](./STATUS.md#go-live-checklist). It is grounded in the current
 code under `packages/backend/src`, not a summary.
 
 ## 1. Where we actually are

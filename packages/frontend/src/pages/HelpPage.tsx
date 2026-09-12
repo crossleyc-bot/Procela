@@ -62,9 +62,9 @@ export default function HelpPage() {
                 borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
                 flexShrink: 0,
               }}
-              title="Opens the product roadmap — rendered live from docs/ROADMAP.md"
+              title="Opens the status & roadmap doc — rendered live from docs/STATUS.md"
             >
-              Product roadmap ↗
+              Status &amp; roadmap ↗
             </button>
             <button
               type="button"

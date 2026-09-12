@@ -1,7 +1,7 @@
 # Procela — Disaster Recovery Runbook
 
 Operational procedures for the three scenarios called out in the
-[go-live checklist](./GO_LIVE_CHECKLIST.md#testing--hardening-beyond-ci)
+[go-live checklist](./STATUS.md#go-live-checklist)
 item #23 — **restore from backup**, **roll back a migration**, and
 **rotate a compromised secret** — plus a full-rebuild path and a
 post-incident verification checklist.
@@ -254,7 +254,7 @@ DATABASE_URL=… npm run db:migrate-json -- --dry-run
 ## 7. Prevention — prod-hardening prerequisites
 
 These make the procedures above actually work in a real incident. Track
-alongside `GO_LIVE_CHECKLIST.md`:
+alongside `STATUS.md` (§ Go-live checklist):
 
 - [ ] `rds.tf`: `backup_retention_period > 0` (PITR), `deletion_protection = true`,
       `skip_final_snapshot = false`, `multi_az = true`, storage on a KMS CMK.

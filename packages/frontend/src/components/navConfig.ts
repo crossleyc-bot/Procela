@@ -57,8 +57,8 @@ export function openTrainingWindow() {
   window.open('/api/v1/docs/training.pdf', 'procela-training', 'popup,width=1100,height=900,noopener,noreferrer');
 }
 
-// Same pattern for the Product Roadmap — opens the HTML rendered live from
-// docs/ROADMAP.md in its own popup. The in-app /roadmap route embeds the
+// Same pattern for the Status & Roadmap doc — opens the HTML rendered live from
+// docs/STATUS.md in its own popup. The in-app /roadmap route embeds the
 // same document; this is the popout equivalent of the Help window.
 export function openRoadmapWindow() {
   window.open('/api/v1/docs/roadmap.html', 'procela-roadmap', 'popup,width=1100,height=900,noopener,noreferrer');

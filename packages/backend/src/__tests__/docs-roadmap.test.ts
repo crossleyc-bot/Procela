@@ -1,7 +1,7 @@
-// GET /api/v1/docs/roadmap.html — the roadmap is served rendered live from
-// docs/ROADMAP.md (the source of truth), the same way /help.html serves
-// HELP.md. Verifies the render, the same-origin framing headers, and that the
-// output actually reflects the markdown file's content.
+// GET /api/v1/docs/roadmap.html — served rendered live from docs/STATUS.md (the
+// consolidated status / roadmap / open-work register), the same way /help.html
+// serves HELP.md. Verifies the render, the same-origin framing headers, and that
+// the output actually reflects the markdown file's content.
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
@@ -44,9 +44,9 @@ describe('docs — roadmap.html', () => {
     const res = await get(port, '/docs/roadmap.html');
     assert.strictEqual(res.status, 200);
     assert.match(String(res.headers['content-type'] || ''), /text\/html/);
-    // Content is rendered from docs/ROADMAP.md — spot-check headings/wording
+    // Content is rendered from docs/STATUS.md — spot-check headings/wording
     // that live in that file so the test fails if the source stops flowing through.
-    assert.match(res.body, /Post-cutover roadmap/i);
+    assert.match(res.body, /Status, Roadmap/i);
     assert.match(res.body, /Track A/);
     assert.match(res.body, /discovery loop/i);
     // Rendered as HTML, not raw markdown.
