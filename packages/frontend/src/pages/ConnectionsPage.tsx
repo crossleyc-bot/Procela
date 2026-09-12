@@ -26,7 +26,6 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
-import { clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 
@@ -1023,63 +1022,39 @@ export default function ConnectionsPage({
         }
       />
 
-      {/* Two-column layout: Type sidebar + content */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
-        {/* Connection Types Sidebar */}
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 10,
-          position: 'sticky',
-          top: 12,
-          maxHeight: 'calc(100vh - 180px)',
-          overflowY: 'auto',
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
-            Connection Types
-          </div>
-          <div
-            {...clickable(() => setFilterConnType(''), { pressed: !filterConnType })}
-            style={{
-              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-              fontWeight: !filterConnType ? 600 : 400,
-              background: !filterConnType ? 'var(--color-primary-light)' : 'transparent',
-              color: !filterConnType ? 'var(--color-primary)' : 'var(--color-text)',
-            }}
-            onMouseEnter={(e) => { if (filterConnType) e.currentTarget.style.background = 'var(--color-bg)'; }}
-            onMouseLeave={(e) => { if (filterConnType) e.currentTarget.style.background = 'transparent'; }}
-          >
-            All Connections ({connections.length})
-          </div>
-          {connectionTypes.map((t) => {
-            const count = connections.filter((c) => c.connectionType === t).length;
-            if (count === 0) return null;
-            const isActive = filterConnType === t;
-            const label = t.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
-            return (
-              <div
-                key={t}
-                {...clickable(() => setFilterConnType(isActive ? '' : t), { pressed: isActive })}
-                style={{
-                  padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-                  fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
-                  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span>{label}</span>
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
-              </div>
-            );
-          })}
-        </div>
+      {/* Full-width content — Connection Types is now a top facet (was a left-rail tree) */}
+      <div>
 
         {/* Content Area */}
         <div>
+          {/* Connection Types chips (was a left-rail tree; now a top facet) */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {([
+              { key: '', label: 'All', count: connections.length },
+              ...connectionTypes.map((t) => ({
+                key: t,
+                label: TYPE_LABELS[t] || t,
+                count: connections.filter((c) => c.connectionType === t).length,
+              })),
+            ]).filter((o) => o.key === '' || o.count > 0).map((o) => {
+              const active = filterConnType === o.key;
+              return (
+                <button
+                  key={o.key || 'all'}
+                  onClick={() => setFilterConnType(o.key)}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+                </button>
+              );
+            })}
+          </div>
           {/* Filters (left-aligned, mirrors Data Assets) */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', width: 200 }}>
